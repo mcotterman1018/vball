@@ -131,6 +131,10 @@ function reducer(state: State, a: Action): State {
       return {
         ...state,
         page: "sbLive",
+        // The receiving team starts a rotation back, so their first sideout
+        // brings serve order I to the service line (not II).
+        homeRot: startRot(state.serving === "home"),
+        awayRot: startRot(state.serving === "away"),
         homePlayers: state.homeLine.map((n) => [n]),
         awayPlayers: state.awayLine.map((n) => [n]),
         homeTimeouts: [],
@@ -354,14 +358,26 @@ function reducer(state: State, a: Action): State {
 }
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
-const COURT_POS = [
-  { pos: 3, x: "15%", y: "20%" },
-  { pos: 2, x: "50%", y: "20%" },
-  { pos: 1, x: "85%", y: "20%" },
-  { pos: 4, x: "15%", y: "70%" },
-  { pos: 5, x: "50%", y: "70%" },
-  { pos: 0, x: "85%", y: "70%" },
+
+// Court slots keyed by the standard volleyball position number, with screen
+// coords. 1 = right back (serving spot), then counter-clockwise 2..6.
+const COURT_SLOTS = [
+  { court: 4, x: "15%", y: "20%" }, // left front
+  { court: 3, x: "50%", y: "20%" }, // middle front
+  { court: 2, x: "85%", y: "20%" }, // right front
+  { court: 5, x: "15%", y: "70%" }, // left back
+  { court: 6, x: "50%", y: "70%" }, // middle back
+  { court: 1, x: "85%", y: "70%" }, // right back
 ];
+
+// A team that receives first starts one rotation "behind": serve order I lines
+// up in right front (court 2), so the first sideout rotates I into the serving
+// spot. Serving first means I starts in right back (court 1).
+const startRot = (servesFirst: boolean) => (servesFirst ? 0 : 5);
+
+// Which serve-order slot (0-5) occupies a given court position, for a team
+// currently at rotation `rot`.
+const serveIndexAtCourt = (court: number, rot: number) => (rot + court - 1) % 6;
 
 export function ScorebookClient({
   storageKey,
@@ -550,24 +566,42 @@ export function ScorebookClient({
                   <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-2">Court</div>
                   <div className="relative h-[170px] bg-bg-alt rounded-[10px] border border-border">
                     <div className="absolute top-[12%] left-[5%] right-[5%] h-[1.5px] bg-border" />
-                    {COURT_POS.map((cp) => (
-                      <div key={cp.pos} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: cp.x, top: cp.y }}>
-                        <input
-                          type="number"
-                          value={t.line[cp.pos]}
-                          onChange={(e) => {
-                            const l = [...t.line];
-                            l[cp.pos] = e.target.value;
-                            dispatch({ t: "field", f: t.lineKey, v: l });
-                          }}
-                          className="w-12 h-10 rounded-lg text-center text-base font-extrabold text-navy outline-none"
-                          style={{
-                            border: t.line[cp.pos] ? `2px solid ${t.color}` : "1.5px dashed var(--color-border)",
-                            background: t.line[cp.pos] ? "var(--color-surface)" : "transparent",
-                          }}
-                        />
-                      </div>
-                    ))}
+                    {COURT_SLOTS.map((slot) => {
+                      const idx = serveIndexAtCourt(slot.court, startRot(state.serving === t.team));
+                      const val = t.line[idx];
+                      return (
+                        <div
+                          key={slot.court}
+                          className="absolute -translate-x-1/2 -translate-y-1/2"
+                          style={{ left: slot.x, top: slot.y }}
+                        >
+                          <input
+                            type="number"
+                            value={val}
+                            onChange={(e) => {
+                              const l = [...t.line];
+                              l[idx] = e.target.value;
+                              dispatch({ t: "field", f: t.lineKey, v: l });
+                            }}
+                            className="w-12 h-10 rounded-lg text-center text-base font-extrabold text-navy outline-none"
+                            style={{
+                              border: val ? `2px solid ${t.color}` : "1.5px dashed var(--color-border)",
+                              background: val ? "var(--color-surface)" : "transparent",
+                            }}
+                          />
+                          <div className="text-[8px] text-text-ter text-center mt-0.5 font-label font-bold">
+                            {ROMAN[idx]}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[10px] text-text-sec mt-1.5 leading-snug">
+                    {state.serving === t.team ? (
+                      <>Serving first — <strong className="text-navy">I</strong> starts in right back.</>
+                    ) : (
+                      <>Receiving first — <strong className="text-navy">I</strong> starts in right front.</>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 mt-2 px-2.5 py-2 bg-libero-bg rounded-lg">
                     <span className="text-[10px] font-extrabold text-libero">LIB</span>
