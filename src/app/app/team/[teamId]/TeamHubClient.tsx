@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { PrimaryBtn } from "@/components/ui/Button";
+import { PrimaryBtn, GhostBtn } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { Pill } from "@/components/ui/Pill";
 import {
   addPlayer,
@@ -15,6 +16,7 @@ import {
   removePlayer,
   addGame,
   removeGame,
+  importGames,
 } from "./actions";
 
 type Player = { id: string; jersey_num: number; name: string; position: string; is_libero: boolean };
@@ -40,6 +42,7 @@ type Scorebook = {
   created_at: string;
   scorebook_sets: MatchSet[];
 };
+type SiblingTeam = { id: string; name: string; games: Game[] };
 
 const POSITIONS = ["OH", "MB", "S", "OPP", "L", "DS"];
 
@@ -50,6 +53,7 @@ export function TeamHubClient({
   games,
   matches,
   scorebooks,
+  siblingTeams,
 }: {
   header: Header;
   userName: string;
@@ -57,11 +61,13 @@ export function TeamHubClient({
   games: Game[];
   matches: Match[];
   scorebooks: Scorebook[];
+  siblingTeams: SiblingTeam[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [editId, setEditId] = useState<string | null>(null);
   const [showAddGame, setShowAddGame] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [gameForm, setGameForm] = useState<{ opponent: string; date: string; homeAway: "Home" | "Away" }>({
     opponent: "",
     date: "",
@@ -259,9 +265,27 @@ export function TeamHubClient({
 
           {/* Schedule */}
           <div>
-            <SH action={() => setShowAddGame((v) => !v)} actionLabel={showAddGame ? "Cancel" : "+ Add game"}>
-              Schedule
-            </SH>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[11px] font-extrabold text-text-ter uppercase font-label tracking-[0.1em]">
+                Schedule
+              </div>
+              <div className="flex items-center gap-3">
+                {siblingTeams.some((t) => t.games.length > 0) && (
+                  <button
+                    onClick={() => setShowImport(true)}
+                    className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer p-0"
+                  >
+                    Import games
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowAddGame((v) => !v)}
+                  className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer p-0"
+                >
+                  {showAddGame ? "Cancel" : "+ Add game"}
+                </button>
+              </div>
+            </div>
             {showAddGame && (
               <div className="fadein px-4 py-3.5 bg-surface rounded-xl mb-2.5 shadow-card-sm">
                 <div className="flex gap-2 flex-wrap items-end">
@@ -429,7 +453,153 @@ export function TeamHubClient({
           )}
         </div>
       </div>
+
+      {showImport && (
+        <ImportGamesModal
+          teamId={teamId}
+          teamName={header.teamName}
+          siblingTeams={siblingTeams.filter((t) => t.games.length > 0)}
+          existingGames={games}
+          onClose={() => setShowImport(false)}
+          onImported={() => {
+            setShowImport(false);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// Import selected games from a sibling team's schedule. Games already on this
+// team (same opponent + date + home/away) are shown as already-added.
+function ImportGamesModal({
+  teamId,
+  teamName,
+  siblingTeams,
+  existingGames,
+  onClose,
+  onImported,
+}: {
+  teamId: string;
+  teamName: string;
+  siblingTeams: SiblingTeam[];
+  existingGames: Game[];
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const gkey = (g: { opponent: string; game_date: string; home_away: string }) =>
+    `${g.opponent}|${g.game_date}|${g.home_away}`;
+  const existingKeys = new Set(existingGames.map(gkey));
+  const importableFor = (id: string) =>
+    (siblingTeams.find((t) => t.id === id)?.games || []).filter((g) => !existingKeys.has(gkey(g)));
+
+  const firstId = siblingTeams[0]?.id ?? "";
+  const [sourceId, setSourceId] = useState(firstId);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(importableFor(firstId).map((g) => g.id)));
+  const [busy, setBusy] = useState(false);
+
+  const source = siblingTeams.find((t) => t.id === sourceId);
+  const importable = importableFor(sourceId);
+
+  function changeSource(id: string) {
+    setSourceId(id);
+    setSelected(new Set(importableFor(id).map((g) => g.id))); // pre-check all importable
+  }
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  async function doImport() {
+    setBusy(true);
+    try {
+      await importGames(teamId, [...selected]);
+      onImported();
+    } catch (e) {
+      setBusy(false);
+      alert("Failed to import: " + (e instanceof Error ? e.message : "unknown"));
+    }
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="text-lg font-extrabold mb-1.5">Import games → {teamName}</div>
+      <div className="text-[13px] text-text-sec mb-4 leading-relaxed">
+        Copy games from another team in this level. They become {teamName}&apos;s own games — edit or remove any
+        that differ (e.g. tournaments).
+      </div>
+
+      <Label>Import from</Label>
+      <select
+        value={sourceId}
+        onChange={(e) => changeSource(e.target.value)}
+        className="w-full px-3 py-2.5 text-[13px] rounded-[10px] border-[1.5px] border-border bg-bg outline-none text-text mb-4"
+      >
+        {siblingTeams.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name} ({t.games.length} game{t.games.length !== 1 ? "s" : ""})
+          </option>
+        ))}
+      </select>
+
+      <div className="flex flex-col gap-1.5 max-h-[240px] overflow-auto mb-4">
+        {(source?.games || []).map((g) => {
+          const already = existingKeys.has(gkey(g));
+          const checked = selected.has(g.id);
+          return (
+            <button
+              key={g.id}
+              disabled={already}
+              onClick={() => toggle(g.id)}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-left border"
+              style={{
+                borderColor: checked && !already ? "var(--color-navy)" : "var(--color-border)",
+                background: already ? "var(--color-bg)" : checked ? "var(--color-navy-bg)" : "var(--color-surface)",
+                cursor: already ? "default" : "pointer",
+                opacity: already ? 0.6 : 1,
+              }}
+            >
+              <div
+                className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 text-[10px] text-white"
+                style={{
+                  background: already ? "var(--color-text-ter)" : checked ? "var(--color-navy)" : "transparent",
+                  border: checked || already ? "none" : "1.5px solid var(--color-border)",
+                }}
+              >
+                {(checked || already) && "✓"}
+              </div>
+              <Pill
+                label={g.home_away}
+                color={g.home_away === "Home" ? "var(--color-navy)" : "var(--color-text-sec)"}
+                bg={g.home_away === "Home" ? "var(--color-navy-bg)" : "var(--color-bg-alt)"}
+              />
+              <div className="flex-1">
+                <div className="text-[13px] font-semibold">vs {g.opponent}</div>
+                <div className="text-[11px] text-text-ter">{g.game_date || "TBD"}</div>
+              </div>
+              {already && <span className="text-[10px] text-text-ter font-semibold">Already added</span>}
+            </button>
+          );
+        })}
+        {importable.length === 0 && (
+          <div className="text-xs text-text-ter text-center py-3">
+            All of this team&apos;s games are already on {teamName}&apos;s schedule.
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2.5">
+        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+        <PrimaryBtn disabled={busy || selected.size === 0} onClick={doImport}>
+          {busy ? "Importing…" : `Import ${selected.size} game${selected.size !== 1 ? "s" : ""}`}
+        </PrimaryBtn>
+      </div>
+    </Modal>
   );
 }
 

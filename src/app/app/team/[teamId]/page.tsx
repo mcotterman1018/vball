@@ -38,6 +38,22 @@ export default async function TeamPage({ params }: PageProps<"/app/team/[teamId]
       .limit(5),
   ]);
 
+  // Sibling teams in the same level (for importing their schedules).
+  const { data: siblingRows } = await supabase
+    .from("teams")
+    .select("id, name, games(id, opponent, home_away, game_date)")
+    .eq("level_id", header.levelId)
+    .neq("id", teamId)
+    .order("sort_order");
+
+  const siblingTeams = (siblingRows || []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    games: [...((t.games as { id: string; opponent: string; home_away: "Home" | "Away"; game_date: string }[]) || [])].sort(
+      (a, b) => (a.game_date || "").localeCompare(b.game_date || "")
+    ),
+  }));
+
   return (
     <TeamHubClient
       header={header}
@@ -46,6 +62,7 @@ export default async function TeamPage({ params }: PageProps<"/app/team/[teamId]
       games={games || []}
       matches={(matches || []) as never[]}
       scorebooks={(books || []) as never[]}
+      siblingTeams={siblingTeams}
     />
   );
 }

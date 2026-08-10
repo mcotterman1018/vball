@@ -86,3 +86,48 @@ export async function removeGame(teamId: string, gameId: string) {
   await supabase.from("games").delete().eq("id", gameId);
   rev(teamId);
 }
+
+// Copy selected games from a sibling team (same level) into this team's
+// schedule. Games become independent copies; exact duplicates are skipped.
+export async function importGames(teamId: string, gameIds: string[]): Promise<number> {
+  const { supabase } = await sb();
+  if (gameIds.length === 0) return 0;
+
+  const { data: target } = await supabase.from("teams").select("level_id").eq("id", teamId).single();
+  if (!target) throw new Error("Team not found");
+
+  // Source games, with their team's level for a scope check.
+  const { data: src } = await supabase
+    .from("games")
+    .select("opponent, home_away, game_date, teams(level_id)")
+    .in("id", gameIds);
+
+  const sameLevel = (src || []).filter((g) => {
+    const t = Array.isArray(g.teams) ? g.teams[0] : g.teams;
+    return t?.level_id === target.level_id;
+  });
+
+  const { data: existing } = await supabase
+    .from("games")
+    .select("opponent, home_away, game_date")
+    .eq("team_id", teamId);
+  const key = (g: { opponent: string; home_away: string; game_date: string }) =>
+    `${g.opponent}|${g.game_date}|${g.home_away}`;
+  const existingKeys = new Set((existing || []).map(key));
+
+  const toInsert = sameLevel
+    .filter((g) => !existingKeys.has(key(g)))
+    .map((g) => ({
+      team_id: teamId,
+      opponent: g.opponent,
+      home_away: g.home_away,
+      game_date: g.game_date,
+    }));
+
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from("games").insert(toInsert);
+    if (error) throw new Error(error.message);
+  }
+  rev(teamId);
+  return toInsert.length;
+}
