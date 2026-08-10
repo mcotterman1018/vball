@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { FormCard } from "@/components/ui/FormCard";
 import { AuthField } from "@/components/ui/Label";
@@ -9,7 +8,6 @@ import { Input } from "@/components/ui/Input";
 import { PrimaryBtn } from "@/components/ui/Button";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +18,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -29,14 +27,10 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    const { data: membership } = await supabase
-      .from("org_members")
-      .select("org_id")
-      .eq("user_id", data.user.id)
-      .limit(1)
-      .maybeSingle();
-    router.push(membership ? "/app" : "/onboarding");
-    router.refresh();
+    // Hard navigation so the server picks up the fresh session cookie. /app
+    // redirects to /onboarding if this user hasn't set up an org yet, so we
+    // don't need a client-side membership lookup here.
+    window.location.assign("/app");
   }
 
   return (
