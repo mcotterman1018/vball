@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { ScorebookSetInput } from "./types";
 
 async function sb() {
   const supabase = await createClient();
@@ -11,23 +12,6 @@ async function sb() {
   if (!user) throw new Error("Not signed in");
   return { supabase, user };
 }
-
-export type ScorebookSetInput = {
-  setNumber: number;
-  homeScore: number;
-  awayScore: number;
-  homeLine: string[];
-  awayLine: string[];
-  homeLibero: string;
-  awayLibero: string;
-  homeGrid: (number | string)[][];
-  awayGrid: (number | string)[][];
-  homeCircled: number[][];
-  awayCircled: number[][];
-  pointLog: unknown[];
-  subLog: unknown[];
-  timeoutLog: unknown[];
-};
 
 export async function saveScorebook(input: {
   teamId: string;

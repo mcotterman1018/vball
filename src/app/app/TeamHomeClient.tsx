@@ -15,16 +15,28 @@ import {
   toggleFavorite,
   toggleCoachLevel,
   signOut,
+  createBookkeeperLink,
+  revokeBookkeeperLink,
 } from "./actions";
+
+export type BookkeeperLink = {
+  id: string;
+  level_id: string;
+  token: string;
+  label: string;
+  active: boolean;
+};
 
 export function TeamHomeClient({
   ctx,
   levels,
   coaches,
+  bookkeeperLinks,
 }: {
   ctx: OrgContext;
   levels: LevelWithTeams[];
   coaches: Coach[];
+  bookkeeperLinks: BookkeeperLink[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -35,6 +47,7 @@ export function TeamHomeClient({
   const [newLevelName, setNewLevelName] = useState("");
   const [addTeamLevelId, setAddTeamLevelId] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [bookLinkLevel, setBookLinkLevel] = useState<{ id: string; name: string } | null>(null);
 
   const isAdmin = ctx.role === "admin";
   const visibleLevels = isAdmin
@@ -207,15 +220,23 @@ export function TeamHomeClient({
                     </div>
                   </div>
                   {isAdmin && (
-                    <button
-                      onClick={() => {
-                        setAddTeamLevelId(level.id);
-                        setShowAddTeam(true);
-                      }}
-                      className="flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold bg-navy text-white border-none rounded-lg cursor-pointer"
-                    >
-                      <Icon n="plus" size={12} color="#FFF" sw={2.5} /> Add team
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setBookLinkLevel({ id: level.id, name: level.name })}
+                        className="flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold bg-surface text-navy border border-navy-border rounded-lg cursor-pointer"
+                      >
+                        <Icon n="book" size={12} color="var(--color-navy)" sw={2} /> Book link
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAddTeamLevelId(level.id);
+                          setShowAddTeam(true);
+                        }}
+                        className="flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold bg-navy text-white border-none rounded-lg cursor-pointer"
+                      >
+                        <Icon n="plus" size={12} color="#FFF" sw={2.5} /> Add team
+                      </button>
+                    </div>
                   )}
                 </div>
                 {level.teams.length === 0 ? (
@@ -419,6 +440,111 @@ export function TeamHomeClient({
           </div>
         </Modal>
       )}
+
+      {bookLinkLevel && (
+        <BookLinkModal
+          level={bookLinkLevel}
+          links={bookkeeperLinks.filter((l) => l.level_id === bookLinkLevel.id)}
+          onClose={() => setBookLinkLevel(null)}
+          onCreate={(label) =>
+            startTransition(() => createBookkeeperLink(bookLinkLevel.id, label).then(() => router.refresh()))
+          }
+          onRevoke={(id) =>
+            startTransition(() => revokeBookkeeperLink(id).then(() => router.refresh()))
+          }
+        />
+      )}
     </div>
+  );
+}
+
+function BookLinkModal({
+  level,
+  links,
+  onClose,
+  onCreate,
+  onRevoke,
+}: {
+  level: { id: string; name: string };
+  links: BookkeeperLink[];
+  onClose: () => void;
+  onCreate: (label: string) => void;
+  onRevoke: (id: string) => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="text-lg font-extrabold mb-1.5">Bookkeeper links — {level.name}</div>
+      <div className="text-[13px] text-text-sec mb-4 leading-relaxed">
+        Share a link with your bookkeeper. They can keep scorebooks for this level&apos;s teams — no account
+        needed. Revoke any link to turn it off.
+      </div>
+
+      <div className="flex flex-col gap-2 mb-4">
+        {links.length === 0 && (
+          <div className="text-xs text-text-ter text-center py-3 bg-bg rounded-lg">No active links yet.</div>
+        )}
+        {links.map((l) => {
+          const url = `${origin}/book/${l.token}`;
+          return (
+            <div key={l.id} className="bg-bg rounded-[10px] p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[13px] font-semibold">{l.label || "Bookkeeper link"}</div>
+                <button
+                  onClick={() => onRevoke(l.id)}
+                  className="text-[11px] font-semibold text-red bg-none border-none cursor-pointer"
+                >
+                  Revoke
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  readOnly
+                  value={url}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="flex-1 text-[11px] px-2 py-1.5 rounded-md border border-border bg-surface text-text-sec outline-none"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(url);
+                    setCopiedId(l.id);
+                    setTimeout(() => setCopiedId((c) => (c === l.id ? null : c)), 2000);
+                  }}
+                  className="px-3 py-1.5 text-[11px] font-bold rounded-md border-none cursor-pointer"
+                  style={{
+                    background: copiedId === l.id ? "var(--color-green)" : "var(--color-navy)",
+                    color: "#FFF",
+                  }}
+                >
+                  {copiedId === l.id ? "✓ Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <AuthField label="New link label (optional)">
+        <Input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="e.g. Home scorer table"
+        />
+      </AuthField>
+      <div className="flex justify-end gap-2.5 mt-4">
+        <GhostBtn onClick={onClose}>Done</GhostBtn>
+        <PrimaryBtn
+          onClick={() => {
+            onCreate(label);
+            setLabel("");
+          }}
+        >
+          Generate link
+        </PrimaryBtn>
+      </div>
+    </Modal>
   );
 }

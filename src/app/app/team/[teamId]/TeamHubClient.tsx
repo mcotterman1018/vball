@@ -33,6 +33,13 @@ type Header = {
   levelName: string;
   orgName: string;
 };
+type Scorebook = {
+  id: string;
+  home_team: string;
+  away_team: string;
+  created_at: string;
+  scorebook_sets: MatchSet[];
+};
 
 const POSITIONS = ["OH", "MB", "S", "OPP", "L", "DS"];
 
@@ -42,12 +49,14 @@ export function TeamHubClient({
   players,
   games,
   matches,
+  scorebooks,
 }: {
   header: Header;
   userName: string;
   players: Player[];
   games: Game[];
   matches: Match[];
+  scorebooks: Scorebook[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -379,6 +388,37 @@ export function TeamHubClient({
                         <div className="text-[13px] font-semibold">vs {m.away_team_name || "Opponent"}</div>
                         <div className="text-[11px] text-text-ter">
                           {m.match_date} · {sets.map((s) => s.home_score + "-" + s.away_score).join(", ")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Scorebooks (incl. ones kept by bookkeepers) */}
+          {scorebooks.length > 0 && (
+            <div>
+              <SH>Scorebooks</SH>
+              {scorebooks.map((b) => {
+                const sets = [...b.scorebook_sets].sort((a, b2) => a.set_number - b2.set_number);
+                return (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between px-3.5 py-2.5 bg-surface rounded-[10px] mb-1.5 shadow-card-sm"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-accent-bg flex items-center justify-center">
+                        <Icon n="book" size={15} color="var(--color-accent)" />
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-semibold">
+                          {b.home_team || "Home"} vs {b.away_team || "Away"}
+                        </div>
+                        <div className="text-[11px] text-text-ter">
+                          {new Date(b.created_at).toLocaleDateString()}
+                          {sets.length > 0 && " · " + sets.map((s) => s.home_score + "-" + s.away_score).join(", ")}
                         </div>
                       </div>
                     </div>

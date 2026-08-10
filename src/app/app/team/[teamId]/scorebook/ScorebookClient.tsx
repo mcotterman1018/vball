@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useReducer, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { PrimaryBtn, GhostBtn } from "@/components/ui/Button";
-import { saveScorebook, type ScorebookSetInput } from "./actions";
+import type { ScorebookSetInput, ScorebookSavePayload } from "./types";
 
 type Team = "home" | "away";
 type RosterEntry = { num: number; name: string; lib: boolean };
@@ -365,19 +364,20 @@ const COURT_POS = [
 ];
 
 export function ScorebookClient({
-  teamId,
-  gameId,
+  storageKey,
   initialHome,
   initialAway,
   roster,
+  saveBook,
+  onExit,
 }: {
-  teamId: string;
-  gameId: string | null;
+  storageKey: string;
   initialHome: string;
   initialAway: string;
   roster: RosterEntry[];
+  saveBook: (payload: ScorebookSavePayload) => Promise<void>;
+  onExit: () => void;
 }) {
-  const router = useRouter();
   const [state, dispatch] = useReducer(reducer, undefined, () => makeInitial(initialHome, initialAway));
   const [subModal, setSubModal] = useState<{ team: Team; position?: number } | null>(null);
   const [subOut, setSubOut] = useState("");
@@ -386,8 +386,6 @@ export function ScorebookClient({
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const prevSet = useRef(state.set);
-
-  const storageKey = `courtiq:book:${teamId}:${gameId ?? "adhoc"}`;
 
   useEffect(() => {
     try {
@@ -435,17 +433,14 @@ export function ScorebookClient({
       timeoutLog: [],
     }));
     try {
-      await saveScorebook({
-        teamId,
-        gameId,
+      await saveBook({
         homeTeam: state.homeTeam,
         awayTeam: state.awayTeam,
         format: state.format,
         sets,
       });
       localStorage.removeItem(storageKey);
-      router.push(`/app/team/${teamId}`);
-      router.refresh();
+      onExit();
     } catch (e) {
       setSaving(false);
       alert("Failed to save scorebook: " + (e instanceof Error ? e.message : "unknown"));
@@ -456,7 +451,7 @@ export function ScorebookClient({
     <div className="bg-navy px-6 py-3 flex items-center justify-between flex-shrink-0">
       <div className="flex items-center gap-3">
         <button
-          onClick={() => router.push(`/app/team/${teamId}`)}
+          onClick={onExit}
           className="flex items-center gap-1.5 bg-white/[0.08] border-none text-white/60 text-xs font-semibold px-3.5 py-1.5 rounded-lg cursor-pointer"
         >
           <Icon n="arrowLeft" size={14} color="rgba(255,255,255,0.6)" sw={2} /> Back
@@ -771,7 +766,7 @@ export function ScorebookClient({
             ↩ Undo
           </button>
           <button
-            onClick={() => router.push(`/app/team/${teamId}`)}
+            onClick={onExit}
             className="px-3.5 py-1.5 text-[11px] font-semibold border-none rounded-lg cursor-pointer"
             style={{ background: "rgba(192,57,43,0.25)", color: "#FCA5A5" }}
           >

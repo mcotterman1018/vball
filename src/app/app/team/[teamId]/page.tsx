@@ -12,7 +12,7 @@ export default async function TeamPage({ params }: PageProps<"/app/team/[teamId]
   if (!header) notFound();
 
   const supabase = await createClient();
-  const [{ data: players }, { data: games }, { data: matches }] = await Promise.all([
+  const [{ data: players }, { data: games }, { data: matches }, { data: books }] = await Promise.all([
     supabase
       .from("players")
       .select("id, jersey_num, name, position, is_libero")
@@ -30,6 +30,12 @@ export default async function TeamPage({ params }: PageProps<"/app/team/[teamId]
       .eq("status", "completed")
       .order("match_date", { ascending: false })
       .limit(5),
+    supabase
+      .from("scorebooks")
+      .select("id, home_team, away_team, created_at, scorebook_sets(set_number, home_score, away_score)")
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   return (
@@ -39,6 +45,7 @@ export default async function TeamPage({ params }: PageProps<"/app/team/[teamId]
       players={players || []}
       games={games || []}
       matches={(matches || []) as never[]}
+      scorebooks={(books || []) as never[]}
     />
   );
 }

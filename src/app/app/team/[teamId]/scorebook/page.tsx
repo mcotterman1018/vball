@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getOrgContext, getTeamHeader } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
-import { ScorebookClient } from "./ScorebookClient";
+import { TeamScorebookClient } from "./TeamScorebookClient";
 
 export default async function ScorebookPage({
   params,
@@ -39,7 +39,7 @@ export default async function ScorebookPage({
   const awayName = game ? (game.home_away === "Home" ? game.opponent : teamFullName) : "Away";
 
   return (
-    <ScorebookClient
+    <TeamScorebookClient
       teamId={teamId}
       gameId={game?.id ?? null}
       initialHome={homeName}

@@ -59,3 +59,22 @@ export async function signOut() {
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
 }
+
+// ── Bookkeeper links (account-less, level-scoped scorebook access) ──
+
+export async function createBookkeeperLink(levelId: string, label: string) {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("create_bookkeeper_link", {
+    p_level_id: levelId,
+    p_label: label || "",
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/app");
+}
+
+export async function revokeBookkeeperLink(linkId: string) {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("bookkeeper_links").update({ active: false }).eq("id", linkId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/app");
+}
