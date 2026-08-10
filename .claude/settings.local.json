@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes create-next-app@latest courtiq-tmp --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --no-turbopack)",
+      "Bash(npm install *)",
+      "Bash(npx --yes supabase init --workdir .)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(mkdir -p \"src/app/app/team/[teamId]\" \"src/app/app/team/[teamId]/stats\" \"src/app/app/team/[teamId]/season\" \"src/app/app/team/[teamId]/scorebook\" \"src/app/app/team/[teamId]/practice\" && echo done)",
+      "Bash(npm run *)",
+      "Bash(git mv *)",
+      "Bash(mv src/middleware.ts src/proxy.ts)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
