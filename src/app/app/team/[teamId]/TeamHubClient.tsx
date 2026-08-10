@@ -174,122 +174,44 @@ export function TeamHubClient({
           </div>
 
           <div className="flex flex-col">
-            {players.map((p) => {
-              const isEditing = editId === p.id;
-              return (
+            {players.map((p) =>
+              editId === p.id ? (
+                <EditablePlayerRow
+                  key={p.id}
+                  player={p}
+                  teamId={teamId}
+                  onClose={() => setEditId(null)}
+                  run={run}
+                />
+              ) : (
                 <div key={p.id}>
-                  <div
-                    className="grid grid-cols-[52px_1fr_48px_52px_36px] items-center py-2.5 px-1 border-b border-border-light"
-                    style={{
-                      background: isEditing ? "var(--color-navy-bg)" : "transparent",
-                      borderRadius: isEditing ? 8 : 0,
-                    }}
-                  >
-                    {isEditing ? (
-                      <>
-                        <input
-                          type="number"
-                          value={p.jersey_num}
-                          onChange={(e) =>
-                            run(updatePlayer(teamId, p.id, { jersey_num: parseInt(e.target.value) || 0 }))
-                          }
-                          className="w-[42px] p-1.5 text-[13px] rounded-md border-[1.5px] border-navy-border bg-surface text-center font-extrabold outline-none text-navy"
-                          autoFocus
-                        />
-                        <input
-                          type="text"
-                          value={p.name}
-                          onChange={(e) => run(updatePlayer(teamId, p.id, { name: e.target.value }))}
-                          placeholder="Player name"
-                          className="px-2 py-1.5 text-[13px] rounded-md border-[1.5px] border-border bg-surface outline-none w-[95%]"
-                        />
-                        <div className="text-[11px] text-text-sec text-center font-semibold">{p.position || "—"}</div>
-                        <button
-                          onClick={() => run(setLibero(teamId, p.id, !p.is_libero))}
-                          className="px-2 py-1.5 text-[11px] font-bold rounded-md border-none cursor-pointer mx-auto"
-                          style={{
-                            background: p.is_libero ? "var(--color-libero)" : "var(--color-bg-deep)",
-                            color: p.is_libero ? "#FFF" : "var(--color-text-sec)",
-                          }}
-                        >
-                          LIB
-                        </button>
-                        <button
-                          onClick={() => setEditId(null)}
-                          className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer text-center"
-                        >
-                          ✓
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <div
-                          onClick={() => setEditId(p.id)}
-                          className="text-[15px] font-extrabold cursor-pointer text-center"
-                          style={{ color: p.is_libero ? "var(--color-libero)" : "var(--color-navy)" }}
-                        >
-                          #{p.jersey_num}
-                        </div>
-                        <div onClick={() => setEditId(p.id)} className="text-sm font-medium text-text cursor-pointer">
-                          {p.name || <span className="text-text-ter italic text-xs">unnamed</span>}
-                        </div>
-                        <div className="text-xs text-text-sec text-center">
-                          {p.position || <span className="text-border-light">—</span>}
-                        </div>
-                        <div className="text-center">
-                          {p.is_libero && <Pill label="LIB" color="var(--color-libero)" bg="var(--color-libero-bg)" />}
-                        </div>
-                        <button
-                          onClick={() => setEditId(p.id)}
-                          className="bg-none border-none cursor-pointer text-text-ter text-center p-0"
-                        >
-                          <Icon n="edit" size={14} color="var(--color-text-ter)" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {isEditing && (
-                    <div className="px-1 pb-3 bg-navy-bg rounded-b-lg -mt-px">
-                      <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-1.5 pt-1">
-                        Position
-                      </div>
-                      <div className="flex gap-1.5 flex-wrap mb-2.5">
-                        {POSITIONS.map((pos) => (
-                          <button
-                            key={pos}
-                            onClick={() => {
-                              run(
-                                updatePlayer(teamId, p.id, { position: p.position === pos ? "" : pos })
-                              );
-                              if (pos === "L" && !p.is_libero) run(setLibero(teamId, p.id, true));
-                            }}
-                            className="px-3.5 py-1.5 text-xs font-bold rounded-lg cursor-pointer"
-                            style={{
-                              border: p.position === pos ? "none" : "1px solid var(--color-border)",
-                              background: p.position === pos ? "var(--color-navy)" : "var(--color-surface)",
-                              color: p.position === pos ? "#FFF" : "var(--color-text-sec)",
-                            }}
-                          >
-                            {pos}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (confirm("Remove #" + p.jersey_num + " from roster?")) {
-                            run(removePlayer(teamId, p.id));
-                            setEditId(null);
-                          }
-                        }}
-                        className="text-[11px] font-semibold text-red bg-none border-none cursor-pointer p-0"
-                      >
-                        Remove player
-                      </button>
+                  <div className="grid grid-cols-[52px_1fr_48px_52px_36px] items-center py-2.5 px-1 border-b border-border-light">
+                    <div
+                      onClick={() => setEditId(p.id)}
+                      className="text-[15px] font-extrabold cursor-pointer text-center"
+                      style={{ color: p.is_libero ? "var(--color-libero)" : "var(--color-navy)" }}
+                    >
+                      #{p.jersey_num}
                     </div>
-                  )}
+                    <div onClick={() => setEditId(p.id)} className="text-sm font-medium text-text cursor-pointer">
+                      {p.name || <span className="text-text-ter italic text-xs">unnamed</span>}
+                    </div>
+                    <div className="text-xs text-text-sec text-center">
+                      {p.position || <span className="text-border-light">—</span>}
+                    </div>
+                    <div className="text-center">
+                      {p.is_libero && <Pill label="LIB" color="var(--color-libero)" bg="var(--color-libero-bg)" />}
+                    </div>
+                    <button
+                      onClick={() => setEditId(p.id)}
+                      className="bg-none border-none cursor-pointer text-text-ter text-center p-0"
+                    >
+                      <Icon n="edit" size={14} color="var(--color-text-ter)" />
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
+              )
+            )}
             {players.length === 0 && (
               <div className="text-[13px] text-text-ter py-6 text-center">
                 No players yet. Click “+ Player” to build your roster.
@@ -466,6 +388,110 @@ export function TeamHubClient({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Roster edit row with instant local typing. Name/number are held in local
+// state and only persisted on blur, so keystrokes never wait on the network.
+function EditablePlayerRow({
+  player,
+  teamId,
+  onClose,
+  run,
+}: {
+  player: Player;
+  teamId: string;
+  onClose: () => void;
+  run: (p: Promise<unknown>) => void;
+}) {
+  const [name, setName] = useState(player.name);
+  const [jersey, setJersey] = useState(String(player.jersey_num));
+
+  function saveName() {
+    if (name !== player.name) run(updatePlayer(teamId, player.id, { name }));
+  }
+  function saveJersey() {
+    const n = parseInt(jersey) || 0;
+    if (n !== player.jersey_num) run(updatePlayer(teamId, player.id, { jersey_num: n }));
+  }
+
+  return (
+    <div>
+      <div className="grid grid-cols-[52px_1fr_48px_52px_36px] items-center py-2.5 px-1 border-b border-border-light bg-navy-bg rounded-t-lg">
+        <input
+          type="number"
+          value={jersey}
+          onChange={(e) => setJersey(e.target.value)}
+          onBlur={saveJersey}
+          className="w-[42px] p-1.5 text-[13px] rounded-md border-[1.5px] border-navy-border bg-surface text-center font-extrabold outline-none text-navy"
+        />
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={saveName}
+          placeholder="Player name"
+          autoFocus
+          className="px-2 py-1.5 text-[13px] rounded-md border-[1.5px] border-border bg-surface outline-none w-[95%]"
+        />
+        <div className="text-[11px] text-text-sec text-center font-semibold">{player.position || "—"}</div>
+        <button
+          onClick={() => run(setLibero(teamId, player.id, !player.is_libero))}
+          className="px-2 py-1.5 text-[11px] font-bold rounded-md border-none cursor-pointer mx-auto"
+          style={{
+            background: player.is_libero ? "var(--color-libero)" : "var(--color-bg-deep)",
+            color: player.is_libero ? "#FFF" : "var(--color-text-sec)",
+          }}
+        >
+          LIB
+        </button>
+        <button
+          onClick={() => {
+            saveName();
+            saveJersey();
+            onClose();
+          }}
+          className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer text-center"
+        >
+          ✓
+        </button>
+      </div>
+      <div className="px-1 pb-3 bg-navy-bg rounded-b-lg -mt-px">
+        <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-1.5 pt-1">
+          Position
+        </div>
+        <div className="flex gap-1.5 flex-wrap mb-2.5">
+          {POSITIONS.map((pos) => (
+            <button
+              key={pos}
+              onClick={() => {
+                run(updatePlayer(teamId, player.id, { position: player.position === pos ? "" : pos }));
+                if (pos === "L" && !player.is_libero) run(setLibero(teamId, player.id, true));
+              }}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-lg cursor-pointer"
+              style={{
+                border: player.position === pos ? "none" : "1px solid var(--color-border)",
+                background: player.position === pos ? "var(--color-navy)" : "var(--color-surface)",
+                color: player.position === pos ? "#FFF" : "var(--color-text-sec)",
+              }}
+            >
+              {pos}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => {
+            if (confirm("Remove #" + player.jersey_num + " from roster?")) {
+              run(removePlayer(teamId, player.id));
+              onClose();
+            }
+          }}
+          className="text-[11px] font-semibold text-red bg-none border-none cursor-pointer p-0"
+        >
+          Remove player
+        </button>
       </div>
     </div>
   );
