@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon } from "@/components/ui/Icon";
 import { Pill } from "@/components/ui/Pill";
 import { ScorebookClient } from "@/app/app/team/[teamId]/scorebook/ScorebookClient";
 import type { ScorebookSavePayload } from "@/app/app/team/[teamId]/scorebook/types";
+import {
+  gamesKey,
+  rosterKey,
+  readLocal,
+  writeLocal,
+  readOutbox,
+  queueBook,
+  removeFromOutbox,
+} from "@/lib/offline";
 
 export type BkContext = {
   levelName: string;
@@ -35,34 +44,105 @@ type Picked = {
 
 export function BookkeeperApp({ token, context }: { token: string; context: BkContext }) {
   const supabase = createClient();
-  const [games, setGames] = useState<BkGame[]>([]);
+  const [games, setGames] = useState<BkGame[]>(() => readLocal<BkGame[]>(gamesKey(token)) ?? []);
   const [loadingGames, setLoadingGames] = useState(true);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [starting, setStarting] = useState(false);
+  const [pending, setPending] = useState(0);
+  const [online, setOnline] = useState(true);
+
+  // Upload any books that were finished while offline.
+  const flushOutbox = useCallback(async () => {
+    const queued = readOutbox().filter((b) => b.token === token);
+    for (const book of queued) {
+      const { error } = await supabase.rpc("bk_save_scorebook", {
+        p_token: book.token,
+        p_team_id: book.teamId,
+        p_game_id: book.gameId,
+        p_home: book.homeTeam,
+        p_away: book.awayTeam,
+        p_format: book.format,
+        p_sets: book.sets,
+      });
+      if (error) break; // still offline or rejected — try again later
+      removeFromOutbox(book.id);
+    }
+    setPending(readOutbox().filter((b) => b.token === token).length);
+  }, [supabase, token]);
 
   useEffect(() => {
+    setPending(readOutbox().filter((b) => b.token === token).length);
+    setOnline(navigator.onLine);
+
+    const goOnline = () => {
+      setOnline(true);
+      flushOutbox();
+    };
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+
     (async () => {
-      const { data } = await supabase.rpc("bk_games", { p_token: token });
-      setGames((data as BkGame[]) || []);
+      // Pull the schedule and every roster so they're on the device before the
+      // gym. Falls back to whatever was cached last time when there's no signal.
+      try {
+        const { data, error } = await supabase.rpc("bk_games", { p_token: token });
+        if (!error && data) {
+          setGames(data as BkGame[]);
+          writeLocal(gamesKey(token), data);
+        }
+      } catch {
+        // Offline — the cached schedule loaded with initial state.
+      }
       setLoadingGames(false);
+
+      try {
+        for (const team of context.teams) {
+          const res = await supabase.rpc("bk_roster", { p_token: token, p_team_id: team.id });
+          if (!res.error && res.data) writeLocal(rosterKey(token, team.id), res.data);
+        }
+        await flushOutbox();
+      } catch {
+        // Offline — cached rosters stay as they are.
+      }
     })();
+
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function startBook(team: { id: string; name: string }, game: BkGame | null) {
     setStarting(true);
-    const { data } = await supabase.rpc("bk_roster", { p_token: token, p_team_id: team.id });
-    const roster = ((data as RosterEntry[]) || []).map((r) => ({ num: r.num, name: r.name, lib: r.lib }));
+    let roster: RosterEntry[] | null = null;
+    try {
+      const { data, error } = await supabase.rpc("bk_roster", { p_token: token, p_team_id: team.id });
+      if (!error && data) roster = data as RosterEntry[];
+    } catch {
+      // Offline — fall through to the cached roster.
+    }
+    if (roster) writeLocal(rosterKey(token, team.id), roster);
+    else roster = readLocal<RosterEntry[]>(rosterKey(token, team.id)) ?? [];
+
     const teamFull = [context.orgName, team.name].filter(Boolean).join(" ");
     const homeName = game ? (game.homeAway === "Home" ? teamFull : game.opponent) : teamFull;
     const awayName = game ? (game.homeAway === "Home" ? game.opponent : teamFull) : "Away";
-    setPicked({ teamId: team.id, teamName: team.name, gameId: game?.id ?? null, homeName, awayName, roster });
+    setPicked({
+      teamId: team.id,
+      teamName: team.name,
+      gameId: game?.id ?? null,
+      homeName,
+      awayName,
+      roster: roster.map((r) => ({ num: r.num, name: r.name, lib: r.lib })),
+    });
     setStarting(false);
   }
 
   async function saveBook(payload: ScorebookSavePayload) {
     if (!picked) return;
-    const { error } = await supabase.rpc("bk_save_scorebook", {
+    const args = {
       p_token: token,
       p_team_id: picked.teamId,
       p_game_id: picked.gameId,
@@ -70,8 +150,25 @@ export function BookkeeperApp({ token, context }: { token: string; context: BkCo
       p_away: payload.awayTeam,
       p_format: payload.format,
       p_sets: payload.sets,
-    });
-    if (error) throw new Error(error.message);
+    };
+    try {
+      const { error } = await supabase.rpc("bk_save_scorebook", args);
+      if (error) throw new Error(error.message);
+      return;
+    } catch {
+      // No connection (or the request failed): keep the book on this device and
+      // upload it automatically once we're back online. Never lose a book.
+      queueBook({
+        token,
+        teamId: picked.teamId,
+        gameId: picked.gameId,
+        homeTeam: payload.homeTeam,
+        awayTeam: payload.awayTeam,
+        format: payload.format,
+        sets: payload.sets,
+      });
+      setPending(readOutbox().filter((b) => b.token === token).length);
+    }
   }
 
   if (picked) {
@@ -97,6 +194,25 @@ export function BookkeeperApp({ token, context }: { token: string; context: BkCo
       </div>
 
       <div className="px-6 py-6 max-w-[640px] mx-auto">
+        {!online && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-yellow-bg border border-yellow-border text-[13px] text-yellow font-semibold">
+            Offline — you can still keep the book. It saves on this device and uploads when
+            you&apos;re back online.
+          </div>
+        )}
+        {pending > 0 && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-accent-bg border border-accent-border flex items-center justify-between gap-3">
+            <div className="text-[13px] text-accent font-semibold">
+              {pending} book{pending !== 1 ? "s" : ""} waiting to upload
+            </div>
+            <button
+              onClick={flushOutbox}
+              className="text-[12px] font-bold text-white bg-accent border-none rounded-lg px-3 py-1.5 cursor-pointer"
+            >
+              Upload now
+            </button>
+          </div>
+        )}
         <div className="text-[13px] text-text-sec mb-5 leading-relaxed">
           Pick a game to keep the book for, or start a blank book for one of your teams.
         </div>
