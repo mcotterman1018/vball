@@ -816,7 +816,8 @@ export function ScorebookClient({
   }
 
   // ── LIVE ──
-  const maxPt = state.set >= state.format ? 15 : 25;
+  // Only a best-of-5 has a short deciding set; every set of a best-of-3 is to 25.
+  const maxPt = state.format === 5 && state.set >= 5 ? 15 : 25;
   const hGP = state.homeScore >= maxPt - 1 && state.homeScore - state.awayScore >= 1;
   const aGP = state.awayScore >= maxPt - 1 && state.awayScore - state.homeScore >= 1;
   const hWon = state.homeScore >= maxPt && state.homeScore - state.awayScore >= 2;
