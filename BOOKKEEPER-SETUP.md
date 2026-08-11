@@ -14,13 +14,36 @@ has to be done **once per device**.
 4. Scroll down and tap **Add to Home Screen**, then **Add**.
 5. You'll now have a **CourtIQ** icon on your home screen.
 
-## Android
+## Android — Chrome
 
 1. Open the link your coach sent you in **Chrome**.
 2. Wait for the "Keep a Scorebook" page to finish loading.
 3. Tap the **⋮** menu in the top right.
 4. Tap **Install app** (or **Add to Home screen**), then confirm.
 5. You'll now have a **CourtIQ** icon on your home screen.
+
+## Samsung tablets & phones — Samsung Internet
+
+Samsung devices open links in **Samsung Internet** by default. That works fine —
+the steps are just in a different place.
+
+1. Open the link your coach sent you in **Samsung Internet**.
+2. Wait for the "Keep a Scorebook" page to finish loading.
+3. Tap the **☰ menu** (three lines, usually bottom-right).
+4. Tap **Add page to**, then **Home screen**, then confirm.
+   - Some versions show a **⊕ / Install** icon right in the address bar instead —
+     either one works.
+5. You'll now have a **CourtIQ** icon on your home screen.
+
+> If you'd rather use Chrome on a Samsung device, that works too — just follow
+> the Chrome steps above. Only install it in **one** browser, though: a book kept
+> in Chrome isn't visible to the Samsung Internet copy, and vice versa.
+
+## Tablet tip
+
+Turn the tablet **sideways (landscape)** while keeping the book. The scorebook
+grid is wide, and landscape shows more of the rotation columns at once. It still
+works in portrait — you'll just scroll sideways a bit more.
 
 ## On game day
 
