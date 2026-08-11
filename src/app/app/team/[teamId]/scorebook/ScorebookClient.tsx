@@ -171,17 +171,29 @@ function replaySet(start: SetStart, events: BookEvent[], setNumber: number): Der
       else awayScore++;
       const ptVal = isHome ? homeScore : awayScore;
       if (sideout) {
+        // The serving team has just been sided out. Their term of service ends
+        // here, so circle the last point that server put up — the circle marks
+        // where a service term finished, not where one began. A server who
+        // never scored has nothing to circle.
+        const lostRot = wasServing === "home" ? homeRot : awayRot;
+        const lostGrid = wasServing === "home" ? homeGrid : awayGrid;
+        const lostCircled = wasServing === "home" ? homeCircled : awayCircled;
+        const row = lostGrid[lostRot];
+        for (let i = row.length - 1; i >= 0; i--) {
+          if (typeof row[i] === "number") {
+            if (!lostCircled[lostRot].includes(i)) lostCircled[lostRot].push(i);
+            break;
+          }
+        }
+
         serving = ev.team;
-        // Winning the serve rotates the receiving team; the point that earned
-        // the serve is circled in the new rotation's row.
+        // Winning the serve rotates the receiving team into their next slot.
         if (isHome) {
           homeRot = (homeRot + 1) % 6;
           homeGrid[homeRot].push(ptVal);
-          homeCircled[homeRot].push(homeGrid[homeRot].length - 1);
         } else {
           awayRot = (awayRot + 1) % 6;
           awayGrid[awayRot].push(ptVal);
-          awayCircled[awayRot].push(awayGrid[awayRot].length - 1);
         }
       } else if (isHome) {
         homeGrid[homeRot].push(ptVal);
@@ -505,6 +517,77 @@ export function ScorebookClient({
     if (setEndDismissed) setSetEndDismissed(false);
   }
 
+  // ── Lineup entry: drag a roster player into a slot, or tap-then-tap ──
+  // Built on pointer events rather than HTML5 drag-and-drop, which doesn't
+  // fire on touchscreens — this has to work on a tablet at the scorer's table.
+  const dragRef = useRef<{ num: string; startX: number; startY: number; moved: boolean } | null>(null);
+  const [dragging, setDragging] = useState<{ num: string; name: string; x: number; y: number } | null>(null);
+  const [hoverSlot, setHoverSlot] = useState<string | null>(null);
+  const [pickedPlayer, setPickedPlayer] = useState<string | null>(null);
+
+  // Put a jersey number in a slot. A player can only occupy one slot per team,
+  // so assigning them somewhere new clears where they were.
+  function assignSlot(team: Team, idx: number, num: string) {
+    const key = team === "home" ? "homeLine" : "awayLine";
+    const line = [...(team === "home" ? state.homeLine : state.awayLine)];
+    const existing = line.indexOf(num);
+    if (existing >= 0 && existing !== idx) line[existing] = "";
+    line[idx] = num;
+    dispatch({ t: "field", f: key, v: line });
+  }
+
+  const slotUnder = (x: number, y: number): { team: Team; idx: number } | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const slot = el?.closest("[data-slot]") as HTMLElement | null;
+    if (!slot?.dataset.slot) return null;
+    const [team, idx] = slot.dataset.slot.split(":");
+    return { team: team as Team, idx: parseInt(idx, 10) };
+  };
+
+  function rosterPointerDown(e: React.PointerEvent, p: RosterEntry) {
+    dragRef.current = { num: String(p.num), startX: e.clientX, startY: e.clientY, moved: false };
+    setDragging({ num: String(p.num), name: p.name, x: e.clientX, y: e.clientY });
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }
+
+  function rosterPointerMove(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 6) d.moved = true;
+    if (!d.moved) return;
+    setDragging((cur) => (cur ? { ...cur, x: e.clientX, y: e.clientY } : cur));
+    const hit = slotUnder(e.clientX, e.clientY);
+    setHoverSlot(hit ? `${hit.team}:${hit.idx}` : null);
+  }
+
+  function rosterPointerUp(e: React.PointerEvent) {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setDragging(null);
+    setHoverSlot(null);
+    if (!d) return;
+    if (d.moved) {
+      const hit = slotUnder(e.clientX, e.clientY);
+      if (hit) assignSlot(hit.team, hit.idx, d.num);
+    } else {
+      // A plain tap arms the player; the next slot tapped receives them.
+      setPickedPlayer((cur) => (cur === d.num ? null : d.num));
+    }
+  }
+
+  // Wraps a lineup input so it can receive a dragged or armed player.
+  const slotProps = (team: Team, idx: number) => ({
+    "data-slot": `${team}:${idx}`,
+    onClick: () => {
+      if (pickedPlayer) {
+        assignSlot(team, idx, pickedPlayer);
+        setPickedPlayer(null);
+      }
+    },
+  });
+
+  const isHovered = (team: Team, idx: number) => hoverSlot === `${team}:${idx}`;
+
   const currentServer = () => {
     const l = state.serving === "home" ? state.homeLine : state.awayLine;
     const r = state.serving === "home" ? state.homeRot : state.awayRot;
@@ -650,11 +733,13 @@ export function ScorebookClient({
                     {COURT_SLOTS.map((slot) => {
                       const idx = serveIndexAtCourt(slot.court, startRot(state.serving === t.team));
                       const val = t.line[idx];
+                      const hot = isHovered(t.team, idx) || (!!pickedPlayer && !val);
                       return (
                         <div
                           key={slot.court}
+                          {...slotProps(t.team, idx)}
                           className="absolute -translate-x-1/2 -translate-y-1/2"
-                          style={{ left: slot.x, top: slot.y }}
+                          style={{ left: slot.x, top: slot.y, cursor: pickedPlayer ? "copy" : undefined }}
                         >
                           <input
                             type="number"
@@ -664,10 +749,18 @@ export function ScorebookClient({
                               l[idx] = e.target.value;
                               dispatch({ t: "field", f: t.lineKey, v: l });
                             }}
-                            className="w-12 h-10 rounded-lg text-center text-base font-extrabold text-navy outline-none"
+                            className="w-12 h-10 rounded-lg text-center text-base font-extrabold text-navy outline-none transition-colors"
                             style={{
-                              border: val ? `2px solid ${t.color}` : "1.5px dashed var(--color-border)",
-                              background: val ? "var(--color-surface)" : "transparent",
+                              border: hot
+                                ? "2px dashed var(--color-navy)"
+                                : val
+                                ? `2px solid ${t.color}`
+                                : "1.5px dashed var(--color-border)",
+                              background: isHovered(t.team, idx)
+                                ? "var(--color-navy-bg)"
+                                : val
+                                ? "var(--color-surface)"
+                                : "transparent",
                             }}
                           />
                           <div className="text-[8px] text-text-ter text-center mt-0.5 font-label font-bold">
@@ -697,26 +790,37 @@ export function ScorebookClient({
                 </div>
                 <div className="flex-1 p-3.5">
                   <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-2">Serve order</div>
-                  {ROMAN.map((pos, idx) => (
-                    <div key={pos} className="flex items-center gap-1.5 mb-1.5">
-                      <span className="w-[22px] text-[11px] font-bold text-text-ter">{pos}</span>
-                      <input
-                        type="number"
-                        value={t.line[idx]}
-                        onChange={(e) => {
-                          const l = [...t.line];
-                          l[idx] = e.target.value;
-                          dispatch({ t: "field", f: t.lineKey, v: l });
+                  {ROMAN.map((pos, idx) => {
+                    const hot = isHovered(t.team, idx) || (!!pickedPlayer && !t.line[idx]);
+                    const named = roster.find((r) => String(r.num) === String(t.line[idx]));
+                    return (
+                      <div
+                        key={pos}
+                        {...slotProps(t.team, idx)}
+                        className="flex items-center gap-1.5 mb-1.5 rounded-lg transition-colors"
+                        style={{
+                          background: isHovered(t.team, idx) ? "var(--color-navy-bg)" : "transparent",
+                          cursor: pickedPlayer ? "copy" : undefined,
                         }}
-                        className="w-[50px] px-2 py-1.5 rounded-lg border-[1.5px] border-border bg-bg text-center text-[15px] font-extrabold text-text outline-none"
-                      />
-                      {t.team === "home" &&
-                        (() => {
-                          const p = roster.find((r) => String(r.num) === String(t.line[idx]));
-                          return p ? <span className="text-[10px] text-text-ter ml-1">{p.name}</span> : null;
-                        })()}
-                    </div>
-                  ))}
+                      >
+                        <span className="w-[22px] text-[11px] font-bold text-text-ter">{pos}</span>
+                        <input
+                          type="number"
+                          value={t.line[idx]}
+                          onChange={(e) => {
+                            const l = [...t.line];
+                            l[idx] = e.target.value;
+                            dispatch({ t: "field", f: t.lineKey, v: l });
+                          }}
+                          className="w-[50px] px-2 py-1.5 rounded-lg bg-bg text-center text-[15px] font-extrabold text-text outline-none transition-colors"
+                          style={{
+                            border: hot ? "2px dashed var(--color-navy)" : "1.5px solid var(--color-border)",
+                          }}
+                        />
+                        {named && <span className="text-[10px] text-text-ter ml-1">{named.name}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -725,25 +829,73 @@ export function ScorebookClient({
         {roster.some((p) => p.name) && (
           <div className="px-7 pb-7">
             <div className="px-4 py-3 bg-surface rounded-xl shadow-card-sm">
-              <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-2">Roster Reference</div>
+              <div className="flex items-baseline justify-between mb-2 gap-3">
+                <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em]">
+                  Roster
+                </div>
+                <div className="text-[11px] text-text-sec">
+                  {pickedPlayer ? (
+                    <span className="text-navy font-semibold">
+                      Now tap a lineup box to place #{pickedPlayer}
+                    </span>
+                  ) : (
+                    <>Drag a player into a lineup box — or tap them, then tap the box.</>
+                  )}
+                </div>
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {roster
                   .filter((p) => p.name)
-                  .map((p) => (
+                  .map((p) => {
+                    const inLineup =
+                      state.homeLine.includes(String(p.num)) || state.awayLine.includes(String(p.num));
+                    const armed = pickedPlayer === String(p.num);
+                    return (
                     <span
                       key={p.num}
-                      className="text-[11px] px-2.5 py-1 rounded-md font-semibold border"
+                      onPointerDown={(e) => rosterPointerDown(e, p)}
+                      onPointerMove={rosterPointerMove}
+                      onPointerUp={rosterPointerUp}
+                      onPointerCancel={() => {
+                        dragRef.current = null;
+                        setDragging(null);
+                        setHoverSlot(null);
+                      }}
+                      className="text-[11px] px-2.5 py-1.5 rounded-md font-semibold border select-none transition-all"
                       style={{
-                        background: p.lib ? "var(--color-libero-bg)" : "var(--color-bg-alt)",
-                        color: p.lib ? "var(--color-libero)" : "var(--color-text)",
-                        borderColor: p.lib ? "var(--color-libero-border)" : "var(--color-border)",
+                        // Stops the page scrolling out from under a drag on touch.
+                        touchAction: "none",
+                        cursor: "grab",
+                        opacity: inLineup && !armed ? 0.45 : 1,
+                        background: armed
+                          ? "var(--color-navy)"
+                          : p.lib
+                          ? "var(--color-libero-bg)"
+                          : "var(--color-bg-alt)",
+                        color: armed ? "#FFF" : p.lib ? "var(--color-libero)" : "var(--color-text)",
+                        borderColor: armed
+                          ? "var(--color-navy)"
+                          : p.lib
+                          ? "var(--color-libero-border)"
+                          : "var(--color-border)",
                       }}
                     >
                       #{p.num} {p.name}
                     </span>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Chip that follows the finger/cursor while dragging a player. */}
+        {dragging && (
+          <div
+            className="fixed z-[300] pointer-events-none text-[12px] px-3 py-1.5 rounded-lg font-bold bg-navy text-white shadow-card-lg"
+            style={{ left: dragging.x, top: dragging.y, transform: "translate(-50%, -160%)" }}
+          >
+            #{dragging.num} {dragging.name}
           </div>
         )}
       </div>
