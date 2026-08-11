@@ -18,6 +18,23 @@ type PointEntry = {
 type SubEntry = { team: Team; out: string; playerIn: string; set: number; homeScore: number; awayScore: number };
 type TOEntry = { team: Team; homeScore: number; awayScore: number };
 
+// Everything that happens during a set is recorded as an ordered event list,
+// and the visible book (scores, rotations, grids, subs, timeouts) is rebuilt by
+// replaying it. That makes undo exact: drop the last event and replay.
+type BookEvent =
+  | { k: "point"; team: Team }
+  | { k: "sub"; team: Team; out: string; playerIn: string }
+  | { k: "timeout"; team: Team }
+  | { k: "circle"; team: Team; row: number; col: number };
+
+type SetStart = {
+  homeLine: string[];
+  awayLine: string[];
+  serving: Team;
+  homeRot: number;
+  awayRot: number;
+};
+
 type SetData = {
   set: number;
   homeScore: number;
@@ -66,6 +83,9 @@ type State = {
   toLog: TOEntry[];
   setData: SetData[];
   matchDone: boolean;
+  // Source of truth for the current set; everything above is derived from these.
+  events: BookEvent[];
+  setStart: SetStart | null;
 };
 
 const grid6 = (): number[][] => [[], [], [], [], [], []];
@@ -103,7 +123,194 @@ function makeInitial(home: string, away: string): State {
     toLog: [],
     setData: [],
     matchDone: false,
+    events: [],
+    setStart: null,
   };
+}
+
+type Derived = Pick<
+  State,
+  | "homeScore" | "awayScore" | "serving" | "homeRot" | "awayRot"
+  | "homeGrid" | "awayGrid" | "homeCircled" | "awayCircled"
+  | "homeLine" | "awayLine" | "homePlayers" | "awayPlayers"
+  | "homeSubs" | "awaySubs" | "homeTO" | "awayTO"
+  | "homeTimeouts" | "awayTimeouts" | "pointLog" | "subLog" | "toLog"
+>;
+
+// Rebuild the whole set from its starting lineups + the event list.
+function replaySet(start: SetStart, events: BookEvent[], setNumber: number): Derived {
+  let homeScore = 0;
+  let awayScore = 0;
+  let serving: Team = start.serving;
+  let homeRot = start.homeRot;
+  let awayRot = start.awayRot;
+  let homeSubs = 0;
+  let awaySubs = 0;
+  let homeTO = 0;
+  let awayTO = 0;
+  const homeLine = [...start.homeLine];
+  const awayLine = [...start.awayLine];
+  const homeGrid: (number | string)[][] = [[], [], [], [], [], []];
+  const awayGrid: (number | string)[][] = [[], [], [], [], [], []];
+  const homeCircled: number[][] = [[], [], [], [], [], []];
+  const awayCircled: number[][] = [[], [], [], [], [], []];
+  const homePlayers = start.homeLine.map((n) => [n]);
+  const awayPlayers = start.awayLine.map((n) => [n]);
+  const homeTimeouts: string[] = [];
+  const awayTimeouts: string[] = [];
+  const pointLog: PointEntry[] = [];
+  const subLog: SubEntry[] = [];
+  const toLog: TOEntry[] = [];
+
+  for (const ev of events) {
+    const isHome = ev.team === "home";
+    if (ev.k === "point") {
+      const wasServing = serving;
+      const sideout = ev.team !== wasServing;
+      if (isHome) homeScore++;
+      else awayScore++;
+      const ptVal = isHome ? homeScore : awayScore;
+      if (sideout) {
+        serving = ev.team;
+        // Winning the serve rotates the receiving team; the point that earned
+        // the serve is circled in the new rotation's row.
+        if (isHome) {
+          homeRot = (homeRot + 1) % 6;
+          homeGrid[homeRot].push(ptVal);
+          homeCircled[homeRot].push(homeGrid[homeRot].length - 1);
+        } else {
+          awayRot = (awayRot + 1) % 6;
+          awayGrid[awayRot].push(ptVal);
+          awayCircled[awayRot].push(awayGrid[awayRot].length - 1);
+        }
+      } else if (isHome) {
+        homeGrid[homeRot].push(ptVal);
+      } else {
+        awayGrid[awayRot].push(ptVal);
+      }
+      const serverLine = serving === "home" ? homeLine : awayLine;
+      const serverRot = serving === "home" ? homeRot : awayRot;
+      pointLog.push({
+        team: ev.team,
+        homeScore,
+        awayScore,
+        server: serverLine[serverRot],
+        serving,
+        sideout,
+      });
+    } else if (ev.k === "sub") {
+      if ((isHome ? homeSubs : awaySubs) >= 18) continue;
+      const line = isHome ? homeLine : awayLine;
+      const idx = line.indexOf(String(ev.out));
+      if (idx === -1) continue;
+      line[idx] = String(ev.playerIn);
+      (isHome ? homePlayers : awayPlayers)[idx].push(String(ev.playerIn));
+      (isHome ? homeGrid : awayGrid)[idx].push("S");
+      if (isHome) homeSubs++;
+      else awaySubs++;
+      subLog.push({
+        team: ev.team,
+        out: ev.out,
+        playerIn: ev.playerIn,
+        set: setNumber,
+        homeScore,
+        awayScore,
+      });
+    } else if (ev.k === "timeout") {
+      if ((isHome ? homeTO : awayTO) >= 2) continue;
+      const my = isHome ? homeScore : awayScore;
+      const opp = isHome ? awayScore : homeScore;
+      if (isHome) {
+        homeTO++;
+        homeTimeouts.push(my + "-" + opp);
+      } else {
+        awayTO++;
+        awayTimeouts.push(my + "-" + opp);
+      }
+      toLog.push({ team: ev.team, homeScore, awayScore });
+    } else {
+      // Manual circle toggle by the bookkeeper.
+      const circled = isHome ? homeCircled : awayCircled;
+      const at = circled[ev.row].indexOf(ev.col);
+      if (at >= 0) circled[ev.row].splice(at, 1);
+      else circled[ev.row].push(ev.col);
+    }
+  }
+
+  return {
+    homeScore, awayScore, serving, homeRot, awayRot,
+    homeGrid, awayGrid, homeCircled, awayCircled,
+    homeLine, awayLine, homePlayers, awayPlayers,
+    homeSubs, awaySubs, homeTO, awayTO,
+    homeTimeouts, awayTimeouts, pointLog, subLog, toLog,
+  };
+}
+
+// Apply a new event list to the set, recomputing everything it drives.
+function withEvents(state: State, events: BookEvent[]): State {
+  if (!state.setStart) return state;
+  return { ...state, ...replaySet(state.setStart, events, state.set), events };
+}
+
+// A book saved before the event log existed still has its point/sub/timeout
+// logs. Rebuild an equivalent event list from them so undo works, keeping the
+// old starting rotations so the restored grid matches what was on screen.
+function migrateStoredState(stored: State): State {
+  if (Array.isArray(stored.events) && stored.setStart !== undefined) return stored;
+
+  const pts = stored.pointLog || [];
+  const subs = stored.subLog || [];
+  const tos = stored.toLog || [];
+  const flip = (t: Team): Team => (t === "home" ? "away" : "home");
+  // A first rally that wasn't a sideout means the scorer was already serving.
+  const startServing: Team = pts.length
+    ? pts[0].sideout
+      ? flip(pts[0].team)
+      : pts[0].team
+    : stored.serving;
+
+  const setStart: SetStart = {
+    homeLine: (stored.homePlayers || []).map((p) => p?.[0] ?? ""),
+    awayLine: (stored.awayPlayers || []).map((p) => p?.[0] ?? ""),
+    serving: startServing,
+    homeRot: 0,
+    awayRot: 0,
+  };
+
+  // Subs and timeouts recorded the score they happened at, so slot them back
+  // between the points that produced that score.
+  const pending: { at: [number, number]; ev: BookEvent; used: boolean }[] = [
+    ...subs.map((s) => ({
+      at: [s.homeScore, s.awayScore] as [number, number],
+      ev: { k: "sub", team: s.team, out: s.out, playerIn: s.playerIn } as BookEvent,
+      used: false,
+    })),
+    ...tos.map((t) => ({
+      at: [t.homeScore, t.awayScore] as [number, number],
+      ev: { k: "timeout", team: t.team } as BookEvent,
+      used: false,
+    })),
+  ];
+
+  const events: BookEvent[] = [];
+  for (let i = 0; i <= pts.length; i++) {
+    const h = i === 0 ? 0 : pts[i - 1].homeScore;
+    const aw = i === 0 ? 0 : pts[i - 1].awayScore;
+    for (const p of pending) {
+      if (!p.used && p.at[0] === h && p.at[1] === aw) {
+        p.used = true;
+        events.push(p.ev);
+      }
+    }
+    if (i < pts.length) events.push({ k: "point", team: pts[i].team });
+  }
+  for (const p of pending) if (!p.used) events.push(p.ev);
+
+  const base: State = { ...stored, events, setStart };
+  if (stored.page === "sbLive" && setStart.homeLine.some(Boolean)) {
+    return withEvents(base, events);
+  }
+  return base;
 }
 
 type Action =
@@ -123,182 +330,54 @@ type Action =
 function reducer(state: State, a: Action): State {
   switch (a.t) {
     case "hydrate":
-      return a.state;
+      return migrateStoredState(a.state);
     case "field":
       return { ...state, [a.f]: a.v } as State;
     case "startSet": {
       if (state.homeLine.some((x) => !x) || state.awayLine.some((x) => !x)) return state;
-      return {
-        ...state,
-        page: "sbLive",
-        // The receiving team starts a rotation back, so their first sideout
-        // brings serve order I to the service line (not II).
+      // The receiving team starts a rotation back, so their first sideout
+      // brings serve order I to the service line (not II).
+      const setStart: SetStart = {
+        homeLine: [...state.homeLine],
+        awayLine: [...state.awayLine],
+        serving: state.serving,
         homeRot: startRot(state.serving === "home"),
         awayRot: startRot(state.serving === "away"),
-        homePlayers: state.homeLine.map((n) => [n]),
-        awayPlayers: state.awayLine.map((n) => [n]),
-        homeTimeouts: [],
-        awayTimeouts: [],
       };
+      return withEvents({ ...state, page: "sbLive", setStart }, []);
     }
-    case "point": {
-      const scoringTeam = a.team;
-      const servingTeam = state.serving;
-      const isHome = scoringTeam === "home";
-      const hs = state.homeScore + (isHome ? 1 : 0);
-      const as = state.awayScore + (!isHome ? 1 : 0);
-      const newPtVal = isHome ? hs : as;
-      let newServing = servingTeam;
-      let newHRot = state.homeRot;
-      let newARot = state.awayRot;
-      const hGrid = state.homeGrid.map((r) => [...r]);
-      const aGrid = state.awayGrid.map((r) => [...r]);
-      const hCircled = state.homeCircled.map((r) => [...r]);
-      const aCircled = state.awayCircled.map((r) => [...r]);
-      if (scoringTeam === servingTeam) {
-        if (servingTeam === "home") hGrid[newHRot] = [...hGrid[newHRot], newPtVal];
-        else aGrid[newARot] = [...aGrid[newARot], newPtVal];
-      } else {
-        newServing = scoringTeam;
-        if (scoringTeam === "home") {
-          newHRot = (state.homeRot + 1) % 6;
-          hGrid[newHRot] = [...hGrid[newHRot], newPtVal];
-          const ci = hGrid[newHRot].length - 1;
-          if (!hCircled[newHRot].includes(ci)) hCircled[newHRot].push(ci);
-        } else {
-          newARot = (state.awayRot + 1) % 6;
-          aGrid[newARot] = [...aGrid[newARot], newPtVal];
-          const ci = aGrid[newARot].length - 1;
-          if (!aCircled[newARot].includes(ci)) aCircled[newARot].push(ci);
-        }
-      }
-      const serverLine = newServing === "home" ? state.homeLine : state.awayLine;
-      const serverRot = newServing === "home" ? newHRot : newARot;
-      const entry: PointEntry = {
-        team: scoringTeam,
-        homeScore: hs,
-        awayScore: as,
-        server: serverLine[serverRot],
-        serving: newServing,
-        sideout: scoringTeam !== servingTeam,
-      };
-      return {
-        ...state,
-        homeScore: hs,
-        awayScore: as,
-        serving: newServing,
-        homeRot: newHRot,
-        awayRot: newARot,
-        pointLog: [...state.pointLog, entry],
-        homeGrid: hGrid,
-        awayGrid: aGrid,
-        homeCircled: hCircled,
-        awayCircled: aCircled,
-      };
-    }
+    case "point":
+      return withEvents(state, [...state.events, { k: "point", team: a.team }]);
+    case "sub":
+      return withEvents(state, [
+        ...state.events,
+        { k: "sub", team: a.team, out: a.out, playerIn: a.playerIn },
+      ]);
+    case "timeout":
+      return withEvents(state, [...state.events, { k: "timeout", team: a.team }]);
+    case "circle":
+      return withEvents(state, [
+        ...state.events,
+        { k: "circle", team: a.team, row: a.row, col: a.col },
+      ]);
+    case "undo":
+      if (!state.events.length) return state;
+      return withEvents(state, state.events.slice(0, -1));
     case "removePoint": {
-      const isHome = a.team === "home";
-      const scoreKey = isHome ? "homeScore" : "awayScore";
-      if (state[scoreKey] <= 0) return state;
-      const log = [...state.pointLog];
+      // The −1 buttons drop that team's most recent point and rebuild, so
+      // rotation and serve stay consistent with the remaining rallies.
       let idx = -1;
-      for (let i = log.length - 1; i >= 0; i--) {
-        if (log[i].team === a.team) {
+      for (let i = state.events.length - 1; i >= 0; i--) {
+        const ev = state.events[i];
+        if (ev.k === "point" && ev.team === a.team) {
           idx = i;
           break;
         }
       }
       if (idx === -1) return state;
-      const entry = log[idx];
-      log.splice(idx, 1);
-      const gridKey = isHome ? "homeGrid" : "awayGrid";
-      const circKey = isHome ? "homeCircled" : "awayCircled";
-      const grid = state[gridKey].map((r) => [...r]);
-      const circ = state[circKey].map((r) => [...r]);
-      const target = isHome ? entry.homeScore : entry.awayScore;
-      for (let ri = 0; ri < 6; ri++) {
-        const row = grid[ri];
-        for (let ci = row.length - 1; ci >= 0; ci--) {
-          if (row[ci] === target) {
-            row.splice(ci, 1);
-            circ[ri] = circ[ri].filter((c) => c < row.length);
-            break;
-          }
-        }
-        if (grid[ri].length < state[gridKey][ri].length) break;
-      }
-      return {
-        ...state,
-        [scoreKey]: state[scoreKey] - 1,
-        pointLog: log,
-        [gridKey]: grid,
-        [circKey]: circ,
-      } as State;
-    }
-    case "circle": {
-      const key = a.team === "home" ? "homeCircled" : "awayCircled";
-      const c = state[key].map((arr) => [...arr]);
-      const idx = c[a.row].indexOf(a.col);
-      if (idx >= 0) c[a.row].splice(idx, 1);
-      else c[a.row].push(a.col);
-      return { ...state, [key]: c } as State;
-    }
-    case "undo": {
-      if (!state.pointLog.length) return state;
-      const log = [...state.pointLog];
-      log.pop();
-      let hs = 0;
-      let as = 0;
-      log.forEach((p) => {
-        hs = p.homeScore;
-        as = p.awayScore;
-      });
-      if (!log.length) {
-        hs = 0;
-        as = 0;
-      }
-      return { ...state, pointLog: log, homeScore: hs, awayScore: as };
-    }
-    case "sub": {
-      const isHome = a.team === "home";
-      const subsKey = isHome ? "homeSubs" : "awaySubs";
-      if (state[subsKey] >= 18) return state;
-      const lineKey = isHome ? "homeLine" : "awayLine";
-      const line = [...state[lineKey]];
-      const idx = line.indexOf(String(a.out));
-      if (idx === -1) return state;
-      line[idx] = String(a.playerIn);
-      const pk = isHome ? "homePlayers" : "awayPlayers";
-      const players = state[pk].map((arr) => [...arr]);
-      players[idx] = [...players[idx], String(a.playerIn)];
-      const gk = isHome ? "homeGrid" : "awayGrid";
-      const grid = state[gk].map((r) => [...r]);
-      grid[idx] = [...grid[idx], "S"];
-      return {
-        ...state,
-        [lineKey]: line,
-        [subsKey]: state[subsKey] + 1,
-        [pk]: players,
-        [gk]: grid,
-        subLog: [
-          ...state.subLog,
-          { team: a.team, out: a.out, playerIn: a.playerIn, set: state.set, homeScore: state.homeScore, awayScore: state.awayScore },
-        ],
-      } as State;
-    }
-    case "timeout": {
-      const isHome = a.team === "home";
-      const toKey = isHome ? "homeTO" : "awayTO";
-      if (state[toKey] >= 2) return state;
-      const tlKey = isHome ? "homeTimeouts" : "awayTimeouts";
-      const my = isHome ? state.homeScore : state.awayScore;
-      const opp = isHome ? state.awayScore : state.homeScore;
-      return {
-        ...state,
-        [toKey]: state[toKey] + 1,
-        [tlKey]: [...state[tlKey], my + "-" + opp],
-        toLog: [...state.toLog, { team: a.team, homeScore: state.homeScore, awayScore: state.awayScore }],
-      } as State;
+      const next = [...state.events];
+      next.splice(idx, 1);
+      return withEvents(state, next);
     }
     case "endSet": {
       const setResult: SetData = {
@@ -347,6 +426,8 @@ function reducer(state: State, a: Action): State {
         pointLog: [],
         subLog: [],
         toLog: [],
+        events: [],
+        setStart: null,
         serving: ls === "home" ? "away" : "home",
       };
     }
