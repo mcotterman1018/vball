@@ -126,7 +126,7 @@ export function TeamHubClient({
         {children}
       </div>
       {action && (
-        <button onClick={action} className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer p-0">
+        <button onClick={action} className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer px-2 py-2 -my-1 rounded-lg active:bg-bg-alt">
           {actionLabel}
         </button>
       )}
@@ -140,7 +140,7 @@ export function TeamHubClient({
         <div className="flex items-center gap-3.5">
           <Link
             href="/app"
-            className="flex items-center gap-1.5 bg-white/[0.08] text-white/55 text-xs font-semibold px-3 py-1.5 rounded-lg"
+            className="flex items-center gap-1.5 bg-white/[0.08] text-white/55 text-xs font-semibold px-3 py-2 rounded-lg"
           >
             <Icon n="arrowLeft" size={13} color="rgba(255,255,255,0.55)" sw={2} /> Teams
           </Link>
@@ -169,7 +169,7 @@ export function TeamHubClient({
               onClick={() =>
                 startTransition(() => addPlayer(teamId).then((id) => { router.refresh(); setEditId(id); }))
               }
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold bg-navy text-white border-none rounded-lg cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-navy text-white border-none rounded-lg cursor-pointer"
             >
               <Icon n="plus" size={13} color="#FFF" sw={2.5} /> Player
             </button>
@@ -219,9 +219,10 @@ export function TeamHubClient({
                     </div>
                     <button
                       onClick={() => setEditId(p.id)}
-                      className="bg-none border-none cursor-pointer text-text-ter text-center p-0"
+                      aria-label={`Edit #${p.jersey_num}`}
+                      className="bg-none border-none cursor-pointer text-text-ter flex items-center justify-center w-9 h-9 mx-auto rounded-lg active:bg-bg-alt"
                     >
-                      <Icon n="edit" size={14} color="var(--color-text-ter)" />
+                      <Icon n="edit" size={16} color="var(--color-text-ter)" />
                     </button>
                   </div>
                 </div>
@@ -273,14 +274,14 @@ export function TeamHubClient({
                 {siblingTeams.some((t) => t.games.length > 0) && (
                   <button
                     onClick={() => setShowImport(true)}
-                    className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer p-0"
+                    className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer px-2 py-2 -my-1 rounded-lg active:bg-bg-alt"
                   >
                     Import games
                   </button>
                 )}
                 <button
                   onClick={() => setShowAddGame((v) => !v)}
-                  className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer p-0"
+                  className="text-[11px] font-bold text-accent bg-none border-none cursor-pointer px-2 py-2 -my-1 rounded-lg active:bg-bg-alt"
                 >
                   {showAddGame ? "Cancel" : "+ Add game"}
                 </button>
@@ -361,7 +362,7 @@ export function TeamHubClient({
                   </div>
                   <button
                     onClick={() => run(removeGame(teamId, g.id))}
-                    className="text-[11px] text-red bg-none border-none cursor-pointer"
+                    className="text-[11px] text-red bg-none border-none cursor-pointer px-2 py-2 -my-1 rounded-lg active:bg-red-bg"
                   >
                     Remove
                   </button>
