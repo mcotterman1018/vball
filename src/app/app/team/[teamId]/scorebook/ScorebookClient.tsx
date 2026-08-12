@@ -719,7 +719,9 @@ export function ScorebookClient({
             </button>
           ))}
         </div>
-        <div className="flex gap-4 px-7 pb-7">
+        {/* Side by side needs ~500px per card for the serve order names to
+            breathe; below that (tablet portrait, phones) stack them instead. */}
+        <div className="flex flex-col lg:flex-row gap-4 px-7 pb-7">
           {teams.map((t) => (
             <div key={t.team} className="flex-1 bg-surface rounded-2xl overflow-hidden shadow-card">
               <div className="h-[3px]" style={{ background: t.color }} />
