@@ -22,7 +22,13 @@
       "Bash(curl -s -o /dev/null -w \"localhost status=%{http_code}\\\\n\" http://localhost:3000/login)",
       "Bash(seq 1 25)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:50099)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:50099)",
+      "Skill(fewer-permission-prompts)",
+      "Skill(fewer-permission-prompts:*)",
+      "Bash(ls -d ~/.claude/projects/*/ 2>/dev/null | head -20; echo \"--- jsonl count ---\"; find ~/.claude/projects -name \"*.jsonl\" -type f 2>/dev/null | wc -l)",
+      "Bash(node \"C:/Users/MEGANC~1/AppData/Local/Temp/claude/C--Volleyball-app/d36ad844-1b29-41c9-a72b-d307c891f5ad/scratchpad/scan-tools.js\" \"C:/Users/MeganCotterman/.claude/projects\")",
+      "Bash(node -e \"const s=require\\('./.claude/settings.json'\\); console.log\\('valid JSON, entries:', s.permissions.allow.length\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:50617)"
     ]
   }
 }
