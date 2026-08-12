@@ -1124,7 +1124,7 @@ export function ScorebookClient({
                     return (
                       <div
                         key={r}
-                        className="w-[26px] h-8 flex items-center justify-center text-[10px] font-extrabold border-b border-border"
+                        className="w-[26px] h-11 flex items-center justify-center text-[10px] font-extrabold border-b border-border"
                         style={{ color: act ? "#FFF" : "var(--color-text-ter)", background: act ? "var(--color-navy)" : "transparent" }}
                       >
                         {ROMAN[r]}
@@ -1144,28 +1144,41 @@ export function ScorebookClient({
                     return (
                       <div
                         key={ri}
-                        className="flex items-center h-8 border-b border-border px-1.5 overflow-x-auto whitespace-nowrap"
+                        className="flex items-center h-11 border-b border-border px-1 overflow-x-auto whitespace-nowrap"
                         style={{ background: act ? "var(--color-navy-bg)" : "transparent" }}
                       >
                         {ph.map((p, pi) => (
                           <span key={pi} className="inline-flex items-center">
                             {pi > 0 && <span className="text-[8px] text-border-light mx-0.5">/</span>}
-                            <span
-                              onClick={() => {
-                                if (p === cur) {
+                            {p === cur ? (
+                              // The player on court: a full-height tap target, since
+                              // this is what opens the sub sheet mid-match.
+                              <button
+                                onClick={() => {
                                   setSubModal({ team: tm.team, position: ri });
                                   setSubOut(p);
-                                }
-                              }}
-                              className="text-xs font-extrabold"
-                              style={{
-                                cursor: p === cur ? "pointer" : "default",
-                                color: p !== cur ? "var(--color-border-light)" : act ? "var(--color-navy)" : "var(--color-text)",
-                                textDecoration: p !== cur ? "line-through" : "none",
-                              }}
-                            >
-                              {p}
-                            </span>
+                                }}
+                                title="Substitute"
+                                className="min-w-[38px] h-9 px-2 rounded-lg text-[15px] font-extrabold border cursor-pointer active:scale-95 transition-transform"
+                                style={{
+                                  color: act ? "var(--color-navy)" : "var(--color-text)",
+                                  background: act ? "var(--color-surface)" : "var(--color-bg-alt)",
+                                  borderColor: act ? "var(--color-navy-border)" : "var(--color-border)",
+                                }}
+                              >
+                                {p}
+                              </button>
+                            ) : (
+                              <span
+                                className="text-xs font-extrabold px-0.5"
+                                style={{
+                                  color: "var(--color-border-light)",
+                                  textDecoration: "line-through",
+                                }}
+                              >
+                                {p}
+                              </span>
+                            )}
                           </span>
                         ))}
                       </div>
@@ -1183,7 +1196,7 @@ export function ScorebookClient({
                     {Array.from({ length: cols }, (_, i) => (
                       <div
                         key={i}
-                        className="w-[26px] flex-shrink-0 flex items-center justify-center text-[8px] text-text font-bold border-r border-border"
+                        className="w-[34px] flex-shrink-0 flex items-center justify-center text-[8px] text-text font-bold border-r border-border"
                       >
                         {i + 1}
                       </div>
@@ -1194,7 +1207,7 @@ export function ScorebookClient({
                     const rd = tm.grid[ri] || [];
                     const rc = tm.circled[ri] || [];
                     return (
-                      <div key={ri} className="flex h-8 border-b border-border" style={{ background: act ? "var(--color-navy-bg)" : "transparent" }}>
+                      <div key={ri} className="flex h-11 border-b border-border" style={{ background: act ? "var(--color-navy-bg)" : "transparent" }}>
                         {Array.from({ length: cols }, (_, ci) => {
                           const v = rd[ci];
                           const has = v !== undefined;
@@ -1206,7 +1219,7 @@ export function ScorebookClient({
                               onClick={() => {
                                 if (has && !isSub) dispatch({ t: "circle", team: tm.team, row: ri, col: ci });
                               }}
-                              className="w-[26px] flex-shrink-0 h-8 flex items-center justify-center border-r border-border"
+                              className="w-[34px] flex-shrink-0 h-11 flex items-center justify-center border-r border-border"
                               style={{ cursor: has && !isSub ? "pointer" : "default" }}
                             >
                               {has && isSub && (
@@ -1311,6 +1324,10 @@ export function ScorebookClient({
           const posIdx = subModal.position !== undefined ? subModal.position : subOut ? line.indexOf(subOut) : -1;
           const posHistory = posIdx >= 0 ? players[posIdx] || [] : [];
           const suggestedIn = posHistory.length >= 2 ? posHistory[posHistory.length - 2] : "";
+          // Bench = our roster minus whoever is on court. Only meaningful for
+          // our own side; we don't know the opponent's bench.
+          const benchPlayers =
+            rosterSide === subModal.team ? roster.filter((r) => !line.includes(String(r.num))) : [];
           const close = () => {
             setSubModal(null);
             setSubOut("");
@@ -1318,10 +1335,13 @@ export function ScorebookClient({
           };
           return (
             <div
-              className="fixed inset-0 bg-[rgba(13,27,62,0.5)] backdrop-blur-sm flex items-center justify-center z-[200]"
+              className="fixed inset-0 bg-[rgba(13,27,62,0.5)] backdrop-blur-sm flex items-start sm:items-center justify-center z-[200] overflow-y-auto py-6"
               onClick={close}
             >
-              <div className="slideup bg-surface rounded-[20px] p-7 max-w-[380px] w-[92%] shadow-card-lg" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="slideup bg-surface rounded-[20px] p-6 max-w-[380px] w-[92%] shadow-card-lg my-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="text-center mb-5">
                   <div className="text-[10px] font-bold text-text-ter uppercase font-label tracking-[0.1em]">Substitution</div>
                   <div className="text-lg font-extrabold mt-1" style={{ color: teamColor }}>
@@ -1363,22 +1383,80 @@ export function ScorebookClient({
                     <div className="text-[26px] text-border font-light">→</div>
                     <div className="text-center">
                       <div className="text-[10px] font-extrabold text-green mb-2 uppercase font-label">In</div>
-                      <input
-                        type="number"
-                        value={subIn}
-                        onChange={(e) => setSubIn(e.target.value)}
-                        placeholder="#"
-                        className="w-16 h-16 rounded-xl border-[3px] border-green-border bg-green-bg text-center text-[26px] font-extrabold text-green outline-none"
-                        autoFocus
-                      />
-                      {suggestedIn && !subIn && (
+                      {/* A plain box, not a text field: tapping it must not raise
+                          the on-screen keyboard, which covers this sheet on a
+                          tablet. Numbers come from the pad below instead. */}
+                      <div className="w-16 h-16 rounded-xl border-[3px] border-green-border bg-green-bg flex items-center justify-center text-[26px] font-extrabold text-green">
+                        {subIn || <span className="text-green/35">#</span>}
+                      </div>
+                      {subIn && (
                         <button
-                          onClick={() => setSubIn(suggestedIn)}
-                          className="block mx-auto mt-2 text-[11px] text-green bg-green-bg border-[1.5px] border-green-border rounded-lg px-3 py-1 cursor-pointer font-semibold"
+                          onClick={() => setSubIn("")}
+                          className="text-[10px] text-text-ter bg-none border-none cursor-pointer mt-1.5 underline"
                         >
-                          #{suggestedIn} back in
+                          clear
                         </button>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {subOut && (
+                  <div className="mb-5">
+                    {benchPlayers.length > 0 && (
+                      <>
+                        <div className="text-[10px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-2">
+                          On the bench
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                          {suggestedIn && (
+                            <button
+                              onClick={() => setSubIn(suggestedIn)}
+                              className="px-3 py-2 text-xs font-bold rounded-lg cursor-pointer bg-green-bg text-green border-[1.5px] border-green-border"
+                            >
+                              #{suggestedIn} back in
+                            </button>
+                          )}
+                          {benchPlayers.map((p) => (
+                            <button
+                              key={p.num}
+                              onClick={() => setSubIn(String(p.num))}
+                              className="px-3 py-2 text-xs font-semibold rounded-lg cursor-pointer bg-bg-alt text-text border border-border"
+                            >
+                              #{p.num} {p.name}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {benchPlayers.length === 0 && suggestedIn && (
+                      <button
+                        onClick={() => setSubIn(suggestedIn)}
+                        className="w-full mb-3 px-3 py-2 text-xs font-bold rounded-lg cursor-pointer bg-green-bg text-green border-[1.5px] border-green-border"
+                      >
+                        #{suggestedIn} back in
+                      </button>
+                    )}
+
+                    <div className="text-[10px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-2">
+                      Or enter a number
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setSubIn((v) => (v.length >= 2 ? v : v + d))}
+                          className="h-12 rounded-xl text-lg font-extrabold cursor-pointer bg-bg border border-border text-text active:scale-95 transition-transform"
+                        >
+                          {d}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setSubIn((v) => v.slice(0, -1))}
+                        className="h-12 rounded-xl text-lg font-extrabold cursor-pointer bg-bg-alt border border-border text-text-sec col-span-2 active:scale-95 transition-transform"
+                      >
+                        ⌫
+                      </button>
                     </div>
                   </div>
                 )}
