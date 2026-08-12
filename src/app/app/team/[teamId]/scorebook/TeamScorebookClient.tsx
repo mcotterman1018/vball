@@ -15,12 +15,14 @@ export function TeamScorebookClient({
   initialHome,
   initialAway,
   roster,
+  rosterSide,
 }: {
   teamId: string;
   gameId: string | null;
   initialHome: string;
   initialAway: string;
   roster: RosterEntry[];
+  rosterSide: "home" | "away";
 }) {
   const router = useRouter();
 
@@ -39,6 +41,7 @@ export function TeamScorebookClient({
       initialHome={initialHome}
       initialAway={initialAway}
       roster={roster}
+      rosterSide={rosterSide}
       saveBook={saveBook}
       onExit={onExit}
     />

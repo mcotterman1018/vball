@@ -20,7 +20,9 @@
       "Bash(echo \"global user: $\\(git config --global user.name\\) / $\\(git config --global user.email\\)\")",
       "Bash(git credential *)",
       "Bash(curl -s -o /dev/null -w \"localhost status=%{http_code}\\\\n\" http://localhost:3000/login)",
-      "Bash(seq 1 25)"
+      "Bash(seq 1 25)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:50099)"
     ]
   }
 }

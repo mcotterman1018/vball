@@ -1,3 +1,5 @@
+import { OfflineRecovery } from "./OfflineRecovery";
+
 // Shown when a page is requested that was never cached and there's no
 // connection. Anything already visited is served from cache instead.
 export default function OfflinePage() {
@@ -15,6 +17,10 @@ export default function OfflinePage() {
         <div className="text-[13px] text-text-ter mt-4 leading-relaxed">
           Any scorebook already in progress is safe — it&apos;s stored on this device and will upload
           when you&apos;re back online.
+        </div>
+        <OfflineRecovery />
+        <div className="text-[12px] text-text-ter mt-3">
+          This page returns on its own as soon as you&apos;re back online.
         </div>
       </div>
     </div>

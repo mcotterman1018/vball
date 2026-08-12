@@ -40,6 +40,7 @@ type Picked = {
   homeName: string;
   awayName: string;
   roster: RosterEntry[];
+  rosterSide: "home" | "away";
 };
 
 export function BookkeeperApp({ token, context }: { token: string; context: BkContext }) {
@@ -127,8 +128,9 @@ export function BookkeeperApp({ token, context }: { token: string; context: BkCo
     else roster = readLocal<RosterEntry[]>(rosterKey(token, team.id)) ?? [];
 
     const teamFull = [context.orgName, team.name].filter(Boolean).join(" ");
-    const homeName = game ? (game.homeAway === "Home" ? teamFull : game.opponent) : teamFull;
-    const awayName = game ? (game.homeAway === "Home" ? game.opponent : teamFull) : "Away";
+    const weAreAway = game?.homeAway === "Away";
+    const homeName = game ? (weAreAway ? game.opponent : teamFull) : teamFull;
+    const awayName = game ? (weAreAway ? teamFull : game.opponent) : "Away";
     setPicked({
       teamId: team.id,
       teamName: team.name,
@@ -136,6 +138,7 @@ export function BookkeeperApp({ token, context }: { token: string; context: BkCo
       homeName,
       awayName,
       roster: roster.map((r) => ({ num: r.num, name: r.name, lib: r.lib })),
+      rosterSide: weAreAway ? "away" : "home",
     });
     setStarting(false);
   }
@@ -178,6 +181,7 @@ export function BookkeeperApp({ token, context }: { token: string; context: BkCo
         initialHome={picked.homeName}
         initialAway={picked.awayName}
         roster={picked.roster}
+        rosterSide={picked.rosterSide}
         saveBook={saveBook}
         onExit={() => setPicked(null)}
       />

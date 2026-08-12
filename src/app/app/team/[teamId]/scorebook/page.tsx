@@ -35,8 +35,9 @@ export default async function ScorebookPage({
   }
 
   const teamFullName = [header.orgName, header.teamName].filter(Boolean).join(" ");
-  const homeName = game ? (game.home_away === "Home" ? teamFullName : game.opponent) : teamFullName;
-  const awayName = game ? (game.home_away === "Home" ? game.opponent : teamFullName) : "Away";
+  const weAreAway = game?.home_away === "Away";
+  const homeName = game ? (weAreAway ? game.opponent : teamFullName) : teamFullName;
+  const awayName = game ? (weAreAway ? teamFullName : game.opponent) : "Away";
 
   return (
     <TeamScorebookClient
@@ -45,6 +46,7 @@ export default async function ScorebookPage({
       initialHome={homeName}
       initialAway={awayName}
       roster={(players || []).map((p) => ({ num: p.jersey_num, name: p.name, lib: p.is_libero }))}
+      rosterSide={weAreAway ? "away" : "home"}
     />
   );
 }

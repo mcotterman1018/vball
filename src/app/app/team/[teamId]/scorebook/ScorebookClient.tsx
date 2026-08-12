@@ -477,6 +477,7 @@ export function ScorebookClient({
   initialHome,
   initialAway,
   roster,
+  rosterSide,
   saveBook,
   onExit,
 }: {
@@ -484,6 +485,9 @@ export function ScorebookClient({
   initialHome: string;
   initialAway: string;
   roster: RosterEntry[];
+  /** Which side of the book our roster is on. The opposing team is tracked by
+   *  jersey number only — we have no names for them. */
+  rosterSide: Team;
   saveBook: (payload: ScorebookSavePayload) => Promise<void>;
   onExit: () => void;
 }) {
@@ -541,6 +545,8 @@ export function ScorebookClient({
     const slot = el?.closest("[data-slot]") as HTMLElement | null;
     if (!slot?.dataset.slot) return null;
     const [team, idx] = slot.dataset.slot.split(":");
+    // Our players can only be dropped into our own lineup.
+    if (team !== rosterSide) return null;
     return { team: team as Team, idx: parseInt(idx, 10) };
   };
 
@@ -579,7 +585,7 @@ export function ScorebookClient({
   const slotProps = (team: Team, idx: number) => ({
     "data-slot": `${team}:${idx}`,
     onClick: () => {
-      if (pickedPlayer) {
+      if (pickedPlayer && team === rosterSide) {
         assignSlot(team, idx, pickedPlayer);
         setPickedPlayer(null);
       }
@@ -587,6 +593,8 @@ export function ScorebookClient({
   });
 
   const isHovered = (team: Team, idx: number) => hoverSlot === `${team}:${idx}`;
+  // Only our own empty boxes light up as drop targets.
+  const isDroppable = (team: Team) => team === rosterSide;
 
   const currentServer = () => {
     const l = state.serving === "home" ? state.homeLine : state.awayLine;
@@ -733,13 +741,18 @@ export function ScorebookClient({
                     {COURT_SLOTS.map((slot) => {
                       const idx = serveIndexAtCourt(slot.court, startRot(state.serving === t.team));
                       const val = t.line[idx];
-                      const hot = isHovered(t.team, idx) || (!!pickedPlayer && !val);
+                      const hot =
+                        isHovered(t.team, idx) || (!!pickedPlayer && isDroppable(t.team) && !val);
                       return (
                         <div
                           key={slot.court}
                           {...slotProps(t.team, idx)}
                           className="absolute -translate-x-1/2 -translate-y-1/2"
-                          style={{ left: slot.x, top: slot.y, cursor: pickedPlayer ? "copy" : undefined }}
+                          style={{
+                            left: slot.x,
+                            top: slot.y,
+                            cursor: pickedPlayer && isDroppable(t.team) ? "copy" : undefined,
+                          }}
                         >
                           <input
                             type="number"
@@ -791,8 +804,13 @@ export function ScorebookClient({
                 <div className="flex-1 p-3.5">
                   <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em] mb-2">Serve order</div>
                   {ROMAN.map((pos, idx) => {
-                    const hot = isHovered(t.team, idx) || (!!pickedPlayer && !t.line[idx]);
-                    const named = roster.find((r) => String(r.num) === String(t.line[idx]));
+                    const hot =
+                      isHovered(t.team, idx) ||
+                      (!!pickedPlayer && isDroppable(t.team) && !t.line[idx]);
+                    // Names come from our roster, so they only apply to our side.
+                    const named = isDroppable(t.team)
+                      ? roster.find((r) => String(r.num) === String(t.line[idx]))
+                      : undefined;
                     return (
                       <div
                         key={pos}
@@ -800,7 +818,7 @@ export function ScorebookClient({
                         className="flex items-center gap-1.5 mb-1.5 rounded-lg transition-colors"
                         style={{
                           background: isHovered(t.team, idx) ? "var(--color-navy-bg)" : "transparent",
-                          cursor: pickedPlayer ? "copy" : undefined,
+                          cursor: pickedPlayer && isDroppable(t.team) ? "copy" : undefined,
                         }}
                       >
                         <span className="w-[22px] text-[11px] font-bold text-text-ter">{pos}</span>
@@ -831,12 +849,13 @@ export function ScorebookClient({
             <div className="px-4 py-3 bg-surface rounded-xl shadow-card-sm">
               <div className="flex items-baseline justify-between mb-2 gap-3">
                 <div className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.08em]">
-                  Roster
+                  Roster · {rosterSide === "home" ? state.homeTeam : state.awayTeam}
                 </div>
                 <div className="text-[11px] text-text-sec">
                   {pickedPlayer ? (
                     <span className="text-navy font-semibold">
-                      Now tap a lineup box to place #{pickedPlayer}
+                      Now tap a {rosterSide === "home" ? "Home" : "Away"} lineup box to place #
+                      {pickedPlayer}
                     </span>
                   ) : (
                     <>Drag a player into a lineup box — or tap them, then tap the box.</>
