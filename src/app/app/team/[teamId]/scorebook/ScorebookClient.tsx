@@ -1064,22 +1064,24 @@ export function ScorebookClient({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto px-2.5 py-1.5">
+      {/* One team per row, and the rows share whatever height is left after the
+          bars — so a full book fits any tablet without scrolling. */}
+      <div className="flex-1 min-h-0 flex flex-col gap-1.5 px-2.5 py-1.5">
         {(hGP || aGP) && !hWon && !aWon && (
-          <div className="px-3.5 py-1.5 bg-yellow-bg border border-yellow-border rounded-[10px] mb-1.5 text-xs font-bold text-yellow">
+          <div className="flex-shrink-0 px-3.5 py-1.5 bg-yellow-bg border border-yellow-border rounded-[10px] text-xs font-bold text-yellow">
             Game point — {hGP ? state.homeTeam : state.awayTeam} ({state.homeScore}-{state.awayScore})
           </div>
         )}
 
-        {/* Both teams side by side once there's width for it, so a whole match
-            is visible at once on a tablet in landscape without scrolling. */}
-        <div className="flex flex-col lg:flex-row lg:items-start gap-1.5 lg:gap-2.5">
         {teams.map((tm) => {
-          const cols = Math.max(12, ...tm.grid.map((r) => r.length + 2));
+          const cols = Math.max(25, ...tm.grid.map((r) => r.length + 2));
           return (
-            <div key={tm.team} className="flex-1 min-w-0 bg-surface rounded-[14px] overflow-hidden shadow-card-sm">
-              <div className="h-[3px]" style={{ background: tm.color }} />
-              <div className="flex items-center justify-between px-3 py-1.5 bg-bg border-b border-border gap-2">
+            <div
+              key={tm.team}
+              className="flex-1 min-h-0 flex flex-col bg-surface rounded-[14px] overflow-hidden shadow-card-sm"
+            >
+              <div className="h-[3px] flex-shrink-0" style={{ background: tm.color }} />
+              <div className="flex-shrink-0 flex items-center justify-between px-3 py-1.5 bg-bg border-b border-border gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-[13px] font-extrabold text-text truncate">{tm.name}</span>
                   <span className="text-[24px] font-extrabold leading-none" style={{ color: tm.color }}>
@@ -1120,16 +1122,16 @@ export function ScorebookClient({
                   </div>
                 </div>
               </div>
-              <div className="flex overflow-hidden">
+              <div className="flex flex-1 min-h-0 overflow-hidden">
                 {/* rotation labels */}
-                <div className="flex-shrink-0 border-r border-border bg-bg">
-                  <div className="h-[18px]" />
+                <div className="flex-shrink-0 flex flex-col border-r border-border bg-bg">
+                  <div className="h-[18px] flex-shrink-0" />
                   {[0, 1, 2, 3, 4, 5].map((r) => {
                     const act = state.serving === tm.team && r === tm.rot;
                     return (
                       <div
                         key={r}
-                        className="w-[22px] h-10 flex items-center justify-center text-[10px] font-extrabold border-b border-border"
+                        className="w-[22px] flex-1 min-h-[30px] max-h-[56px] flex items-center justify-center text-[10px] font-extrabold border-b border-border"
                         style={{ color: act ? "#FFF" : "var(--color-text-ter)", background: act ? "var(--color-navy)" : "transparent" }}
                       >
                         {ROMAN[r]}
@@ -1138,8 +1140,11 @@ export function ScorebookClient({
                   })}
                 </div>
                 {/* players */}
-                <div className="flex-shrink-0 w-[130px]" style={{ borderRight: "2px solid var(--color-navy-border)" }}>
-                  <div className="h-[18px] flex items-center justify-center text-[8px] font-bold text-text-ter border-b border-border uppercase font-label tracking-[0.08em]">
+                <div
+                  className="flex-shrink-0 w-[130px] flex flex-col"
+                  style={{ borderRight: "2px solid var(--color-navy-border)" }}
+                >
+                  <div className="h-[18px] flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-text-ter border-b border-border uppercase font-label tracking-[0.08em]">
                     Players
                   </div>
                   {tm.line.map((pn, ri) => {
@@ -1149,7 +1154,7 @@ export function ScorebookClient({
                     return (
                       <div
                         key={ri}
-                        className="flex items-center h-10 border-b border-border px-1 overflow-x-auto whitespace-nowrap"
+                        className="flex items-center flex-1 min-h-[30px] max-h-[56px] border-b border-border px-1 overflow-x-auto whitespace-nowrap"
                         style={{ background: act ? "var(--color-navy-bg)" : "transparent" }}
                       >
                         {ph.map((p, pi) => (
@@ -1193,14 +1198,17 @@ export function ScorebookClient({
                     );
                   })}
                   {tm.lib && (
-                    <div className="h-[22px] flex items-center px-1.5 bg-libero-bg">
+                    <div className="h-[20px] flex-shrink-0 flex items-center px-1.5 bg-libero-bg">
                       <span className="text-[9px] font-extrabold text-libero">LIB #{tm.lib}</span>
                     </div>
                   )}
                 </div>
                 {/* grid */}
-                <div className="flex-1 overflow-x-auto" style={{ borderRight: "2px solid var(--color-navy-border)" }}>
-                  <div className="flex border-b border-border h-[18px] bg-bg">
+                <div
+                  className="flex-1 min-w-0 overflow-x-auto flex flex-col"
+                  style={{ borderRight: "2px solid var(--color-navy-border)" }}
+                >
+                  <div className="flex border-b border-border h-[18px] flex-shrink-0 bg-bg">
                     {Array.from({ length: cols }, (_, i) => (
                       <div
                         key={i}
@@ -1215,7 +1223,11 @@ export function ScorebookClient({
                     const rd = tm.grid[ri] || [];
                     const rc = tm.circled[ri] || [];
                     return (
-                      <div key={ri} className="flex h-10 border-b border-border" style={{ background: act ? "var(--color-navy-bg)" : "transparent" }}>
+                      <div
+                        key={ri}
+                        className="flex flex-1 min-h-[30px] max-h-[56px] border-b border-border"
+                        style={{ background: act ? "var(--color-navy-bg)" : "transparent" }}
+                      >
                         {Array.from({ length: cols }, (_, ci) => {
                           const v = rd[ci];
                           const has = v !== undefined;
@@ -1227,7 +1239,7 @@ export function ScorebookClient({
                               onClick={() => {
                                 if (has && !isSub) dispatch({ t: "circle", team: tm.team, row: ri, col: ci });
                               }}
-                              className="w-[30px] flex-shrink-0 h-10 flex items-center justify-center border-r border-border"
+                              className="w-[30px] flex-shrink-0 flex items-center justify-center border-r border-border"
                               style={{ cursor: has && !isSub ? "pointer" : "default" }}
                             >
                               {has && isSub && (
@@ -1256,7 +1268,7 @@ export function ScorebookClient({
                   })}
                 </div>
               </div>
-              <div className="flex items-center border-t border-border px-2.5 py-1 bg-bg overflow-hidden">
+              <div className="flex-shrink-0 flex items-center border-t border-border px-2.5 py-1 bg-bg overflow-hidden">
                 <span className="text-[9px] font-bold text-text-ter mr-1.5 uppercase font-label tracking-[0.06em]">Subs</span>
                 <div className="flex gap-0.5 min-w-0 overflow-hidden">
                   {Array.from({ length: 18 }, (_, i) => (
@@ -1278,7 +1290,6 @@ export function ScorebookClient({
             </div>
           );
         })}
-        </div>
       </div>
 
       <div className="px-5 py-2.5 bg-surface border-t border-border flex items-center justify-between flex-shrink-0">
