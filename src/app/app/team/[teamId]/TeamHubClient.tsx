@@ -429,9 +429,10 @@ export function TeamHubClient({
               {scorebooks.map((b) => {
                 const sets = [...b.scorebook_sets].sort((a, b2) => a.set_number - b2.set_number);
                 return (
-                  <div
+                  <Link
                     key={b.id}
-                    className="flex items-center justify-between px-3.5 py-2.5 bg-surface rounded-[10px] mb-1.5 shadow-card-sm"
+                    href={`/app/team/${teamId}/scorebook/${b.id}`}
+                    className="flex items-center justify-between px-3.5 py-2.5 bg-surface rounded-[10px] mb-1.5 shadow-card-sm hover:shadow-card transition-all"
                   >
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-lg bg-accent-bg flex items-center justify-center">
@@ -447,7 +448,8 @@ export function TeamHubClient({
                         </div>
                       </div>
                     </div>
-                  </div>
+                    <Icon n="chevronRight" size={16} color="var(--color-text-ter)" />
+                  </Link>
                 );
               })}
             </div>
