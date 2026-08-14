@@ -211,7 +211,9 @@ function replaySet(start: SetStart, events: BookEvent[], setNumber: number): Der
         sideout,
       });
     } else if (ev.k === "sub") {
-      if ((isHome ? homeSubs : awaySubs) >= 18) continue;
+      // No hard stop at 18: a team out of subs can still be forced into an
+      // injury substitution, and the book has to be able to record it. The UI
+      // warns as the limit approaches and flags anything past it.
       const line = isHome ? homeLine : awayLine;
       const idx = line.indexOf(String(ev.out));
       if (idx === -1) continue;
@@ -468,6 +470,18 @@ const COURT_SLOTS = [
 // spot. Serving first means I starts in right back (court 1).
 const startRot = (servesFirst: boolean) => (servesFirst ? 0 : 5);
 
+// A team gets 18 substitutions per set. Warn as that runs out, and keep
+// flagging it afterwards — subbing past the limit is still allowed, because an
+// injury can force one and the book has to record what actually happened.
+const SUB_LIMIT = 18;
+function subsNotice(used: number): string | null {
+  if (used > SUB_LIMIT) return `${used - SUB_LIMIT} over limit — injury only`;
+  if (used === SUB_LIMIT) return "Out of subs — injury only";
+  const left = SUB_LIMIT - used;
+  if (left <= 2) return `${left} sub${left === 1 ? "" : "s"} left`;
+  return null;
+}
+
 // Which serve-order slot (0-5) occupies a given court position, for a team
 // currently at rotation `rot`.
 const serveIndexAtCourt = (court: number, rot: number) => (rot + court - 1) % 6;
@@ -635,6 +649,36 @@ export function ScorebookClient({
     }
   }
 
+  // Completed sets, shown from our team's point of view so a coach can see at a
+  // glance where the match stands without leaving the set they're scoring.
+  const SetHistory = () => {
+    if (!state.setData.length) return null;
+    return (
+      <div className="flex items-center gap-1 flex-wrap">
+        {state.setData.map((s) => {
+          const ours = rosterSide === "home" ? s.homeScore : s.awayScore;
+          const theirs = rosterSide === "home" ? s.awayScore : s.homeScore;
+          const won = ours > theirs;
+          return (
+            <span
+              key={s.set}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/10 text-[11px] font-bold whitespace-nowrap"
+              title={`Set ${s.set}: ${ours}–${theirs} ${won ? "won" : "lost"}`}
+            >
+              <span className="text-white/40">S{s.set}</span>
+              <span className="text-white">
+                {ours}–{theirs}
+              </span>
+              <span style={{ color: won ? "var(--color-green-border)" : "var(--color-red-border)" }}>
+                {won ? "W" : "L"}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+
   const NavBar = ({ right }: { right?: React.ReactNode }) => (
     <div className="bg-navy px-6 py-3 flex items-center justify-between flex-shrink-0">
       <div className="flex items-center gap-3">
@@ -656,6 +700,7 @@ export function ScorebookClient({
             )}
           </div>
         </div>
+        <SetHistory />
       </div>
       <div className="flex gap-2">{right}</div>
     </div>
@@ -1033,21 +1078,25 @@ export function ScorebookClient({
 
   return (
     <div className="flex flex-col h-screen bg-bg font-display overflow-hidden">
-      <div className="bg-navy px-5 py-2.5 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="text-[15px] font-extrabold text-white">CourtIQ</span>
-          <span className="text-[11px] font-bold text-navy-bg px-2.5 py-0.5 bg-navy-mid rounded-md">SET {state.set}</span>
-          <span className="text-[11px] text-white/40">
+      <div className="bg-navy px-5 py-2.5 flex items-center justify-between flex-shrink-0 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-[15px] font-extrabold text-white flex-shrink-0">CourtIQ</span>
+          <span className="text-[11px] font-bold text-navy-bg px-2.5 py-0.5 bg-navy-mid rounded-md flex-shrink-0">
+            SET {state.set}
+          </span>
+          <span className="text-[11px] text-white/40 truncate">
             Serving:{" "}
             <strong className="text-white">
               #{currentServer()} {state.serving === "home" ? state.homeTeam : state.awayTeam}
             </strong>
           </span>
-          <span className="text-[22px] font-extrabold text-white">
+          <span className="text-[22px] font-extrabold text-white flex-shrink-0">
             {state.homeScore} <span className="text-white/25 text-sm">—</span> {state.awayScore}
           </span>
+          {/* Earlier sets stay visible while a later one is being scored. */}
+          <SetHistory />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-shrink-0">
           <button
             onClick={() => dispatch({ t: "undo" })}
             className="px-3.5 py-1.5 text-xs font-bold bg-accent-bg text-accent border border-accent-border rounded-lg cursor-pointer"
@@ -1268,24 +1317,51 @@ export function ScorebookClient({
                   })}
                 </div>
               </div>
-              <div className="flex-shrink-0 flex items-center border-t border-border px-2.5 py-1 bg-bg overflow-hidden">
-                <span className="text-[9px] font-bold text-text-ter mr-1.5 uppercase font-label tracking-[0.06em]">Subs</span>
+              <div className="flex-shrink-0 flex items-center border-t border-border px-2.5 py-1 bg-bg overflow-hidden gap-1.5">
+                <span className="text-[9px] font-bold text-text-ter uppercase font-label tracking-[0.06em]">Subs</span>
                 <div className="flex gap-0.5 min-w-0 overflow-hidden">
-                  {Array.from({ length: 18 }, (_, i) => (
-                    <div
-                      key={i}
-                      className="w-[15px] h-[15px] flex-shrink-0 flex items-center justify-center text-[8px] font-bold rounded"
-                      style={{
-                        background: i < tm.subs ? "var(--color-navy)" : "var(--color-surface)",
-                        color: i < tm.subs ? "#FFF" : "var(--color-border)",
-                        border: `1px solid ${i < tm.subs ? "var(--color-navy)" : "var(--color-border)"}`,
-                      }}
-                    >
-                      {i + 1}
-                    </div>
-                  ))}
+                  {Array.from({ length: Math.max(18, tm.subs) }, (_, i) => {
+                    const used = i < tm.subs;
+                    const overLimit = i >= 18;
+                    return (
+                      <div
+                        key={i}
+                        className="w-[15px] h-[15px] flex-shrink-0 flex items-center justify-center text-[8px] font-bold rounded"
+                        style={{
+                          background: overLimit
+                            ? "var(--color-red)"
+                            : used
+                            ? "var(--color-navy)"
+                            : "var(--color-surface)",
+                          color: used || overLimit ? "#FFF" : "var(--color-border)",
+                          border: `1px solid ${
+                            overLimit ? "var(--color-red)" : used ? "var(--color-navy)" : "var(--color-border)"
+                          }`,
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+                    );
+                  })}
                 </div>
-                <span className="text-[10px] font-extrabold text-navy ml-2 flex-shrink-0">{tm.subs}/18</span>
+                <span
+                  className="text-[10px] font-extrabold flex-shrink-0"
+                  style={{ color: tm.subs >= 16 ? "var(--color-red)" : "var(--color-navy)" }}
+                >
+                  {tm.subs}/18
+                </span>
+                {subsNotice(tm.subs) && (
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 whitespace-nowrap"
+                    style={{
+                      background: tm.subs >= 18 ? "var(--color-red-bg)" : "var(--color-yellow-bg)",
+                      color: tm.subs >= 18 ? "var(--color-red)" : "var(--color-yellow)",
+                      border: `1px solid ${tm.subs >= 18 ? "var(--color-red-border)" : "var(--color-yellow-border)"}`,
+                    }}
+                  >
+                    {subsNotice(tm.subs)}
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -1362,12 +1438,42 @@ export function ScorebookClient({
                 className="slideup bg-surface rounded-[20px] p-6 max-w-[380px] w-[92%] shadow-card-lg my-auto"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="text-center mb-5">
+                <div className="text-center mb-4">
                   <div className="text-[10px] font-bold text-text-ter uppercase font-label tracking-[0.1em]">Substitution</div>
                   <div className="text-lg font-extrabold mt-1" style={{ color: teamColor }}>
                     {teamName}
                   </div>
                 </div>
+
+                {(() => {
+                  const used = subModal.team === "home" ? state.homeSubs : state.awaySubs;
+                  const notice = subsNotice(used);
+                  if (!notice) return null;
+                  const atLimit = used >= SUB_LIMIT;
+                  return (
+                    <div
+                      className="mb-4 px-3.5 py-2.5 rounded-xl text-[13px] font-semibold text-center"
+                      style={{
+                        background: atLimit ? "var(--color-red-bg)" : "var(--color-yellow-bg)",
+                        color: atLimit ? "var(--color-red)" : "var(--color-yellow)",
+                        border: `1px solid ${atLimit ? "var(--color-red-border)" : "var(--color-yellow-border)"}`,
+                      }}
+                    >
+                      {atLimit ? (
+                        <>
+                          {used} of {SUB_LIMIT} subs used — this team is out.
+                          <div className="font-normal mt-0.5">
+                            You can still record an injury substitution.
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {used} of {SUB_LIMIT} subs used — {notice}.
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
                 {!subOut ? (
                   <div className="mb-5">
                     <div className="text-[13px] text-text-sec text-center mb-3.5">Who&apos;s coming out?</div>
